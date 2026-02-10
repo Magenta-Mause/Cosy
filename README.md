@@ -22,7 +22,8 @@
 
 ### Installation:
 
-- TBA 
+Requirements:
+- docker (v29.1.3 was tested others might also work)
 
 ### Options:
 <details>
