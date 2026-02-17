@@ -32,6 +32,12 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
+# ── Constants ────────────────────────────────────────────────────────────────
+COSY_TAG="v0.0.1"
+FRONTEND_TAG="v0.0.7"
+BACKEND_TAG="v0.0.4"
+CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy-Internal-Deployment/${COSY_TAG}/"
+
 # ── Defaults ─────────────────────────────────────────────────────────────────
 DEPLOY_METHOD_DEFAULT="docker"
 INSTALL_PATH_DEFAULT="/opt/cosy"
@@ -83,17 +89,19 @@ if [[ -t 0 ]]; then
     echo -e "${NC}"
 
     # ── Deployment method ────────────────────────────────────────────────────
-    echo -e "${BOLD}Select deployment method:${NC}"
-    echo "  1) Docker  (recommended)"
-    echo "  2) Kubernetes"
-    echo ""
-    read -rp "Enter choice [1]: " method_choice
-    method_choice="${method_choice:-1}"
-    case "$method_choice" in
+    if [[ -z "${DEPLOY_METHOD-}" ]]; then
+      echo -e "${BOLD}Select deployment method:${NC}"
+      echo "  1) Docker  (recommended)"
+      echo "  2) Kubernetes"
+      echo ""
+      read -rp "Enter choice [1]: " method_choice
+      method_choice="${method_choice:-1}"
+      case "$method_choice" in
         1) DEPLOY_METHOD="docker" ;;
         2) DEPLOY_METHOD="kubernetes" ;;
         *) fatal "Invalid choice '$method_choice'. Please enter 1 or 2." ;;
-    esac
+      esac
+    fi
 
     # ── Installation path ────────────────────────────────────────────────────
     if [[ -z "${INSTALL_PATH-}" ]]; then
@@ -108,16 +116,26 @@ if [[ -t 0 ]]; then
     fi
 
     # ── Ports ────────────────────────────────────────────────────────────────
-    read -rp "Frontend port [${FRONTEND_PORT}]: " input_fe_port
-    FRONTEND_PORT="${input_fe_port:-$FRONTEND_PORT}"
+    # TODO: check if the input is a valid port number (1-65535)
+    if [[ -z "${FRONTEND_PORT-}" ]]; then
+      read -rp "Frontend port [${FRONTEND_PORT_DEFAULT}]: " input_fe_port
+      FRONTEND_PORT="${input_fe_port:-$FRONTEND_PORT_DEFAULT}"
+    fi
 
-    read -rp "Backend port [${BACKEND_PORT}]: " input_be_port
-    BACKEND_PORT="${input_be_port:-$BACKEND_PORT}"
+    if [[ -z "${BACKEND_PORT-}" ]]; then
+      read -rp "Backend port [${BACKEND_PORT_DEFAULT}]: " input_be_port
+      BACKEND_PORT="${input_be_port:-$BACKEND_PORT_DEFAULT}"
+    fi
 
-    echo ""
+    echo $INSTALL_PATH
+    echo $ADMIN_USERNAME
+    echo $FRONTEND_PORT
+    echo $BACKEND_PORT
 fi
 
 # ── Validate deployment method ───────────────────────────────────────────────
+DEPLOY_METHOD="${DEPLOY_METHOD:-$DEPLOY_METHOD_DEFAULT}"
+
 case "$DEPLOY_METHOD" in
     docker) ;;
     kubernetes|k8s)
@@ -150,7 +168,7 @@ elif command -v docker-compose &>/dev/null; then
     COMPOSE_CMD="docker-compose"
     success "Docker Compose (standalone) found: $(docker-compose --version)"
 else
-    fatal "Docker Compose is not installed.\n\n  Install the Docker Compose plugin:\n    sudo apt-get install docker-compose-plugin   # Debian/Ubuntu\n    sudo dnf install docker-compose-plugin        # Fedora\n\n  Or see: https://docs.docker.com/compose/install/"
+    fatal "Docker Compose is not installed.\n\n Make sure either the `docker compose` or `docker-compose` command is available."
 fi
 
 # ── Check port availability ──────────────────────────────────────────────────
@@ -170,8 +188,10 @@ success "Ports ${FRONTEND_PORT} (frontend) and ${BACKEND_PORT} (backend) are ava
 #  Generate credentials
 # ─────────────────────────────────────────────────────────────────────────────
 generate_password() {
-    # 24-character alphanumeric password
-    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24
+  # Generate a 30-character alphanumeric password robust to SIGPIPE.
+  local pw
+  pw=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 30) || true
+  printf '%s' "$pw"
 }
 
 POSTGRES_USER="cosy"
@@ -179,202 +199,41 @@ POSTGRES_PASSWORD="$(generate_password)"
 LOKI_USER="loki"
 LOKI_PASSWORD="$(generate_password)"
 ADMIN_PASSWORD="$(generate_password)"
+COSY_INFLUXDB_USERNAME="cosy"
+COSY_INFLUXDB_PASSWORD="$(generate_password)"
+COSY_INFLUXDB_ADMIN_TOKEN="$(generate_password)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Create installation directory
 # ─────────────────────────────────────────────────────────────────────────────
+# Normalize the installation path so concatenations are predictable:
+# - Use default if unset
+# - Expand leading tilde (~) to $HOME
+# - Strip any trailing slashes
+INSTALL_PATH="${INSTALL_PATH:-$INSTALL_PATH_DEFAULT}"
+if [[ "${INSTALL_PATH}" = ~* ]]; then
+    INSTALL_PATH="${INSTALL_PATH/#\~/$HOME}"
+fi
+INSTALL_PATH="${INSTALL_PATH%/}"
+
 info "Creating installation directory: ${INSTALL_PATH}"
 if ! mkdir -p "$INSTALL_PATH" 2>/dev/null; then
     fatal "Could not create directory '${INSTALL_PATH}'.\n\n  Make sure you have write permissions, or choose a different path:\n    $0 --path /some/other/path"
 fi
 success "Installation directory ready."
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Generate configuration files
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ── .env ─────────────────────────────────────────────────────────────────────
-info "Generating environment configuration..."
-cat > "${INSTALL_PATH}/.env" <<EOF
-# COSY Environment Configuration – generated on $(date -Iseconds)
-POSTGRES_USER=${POSTGRES_USER}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-LOKI_USER=${LOKI_USER}
-LOKI_PASSWORD=${LOKI_PASSWORD}
-COSY_ADMIN_USERNAME=${ADMIN_USERNAME}
-COSY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
-EOF
-chmod 600 "${INSTALL_PATH}/.env"
-success ".env file created."
-
-# ── docker-compose.yml ──────────────────────────────────────────────────────
-info "Generating docker-compose.yml..."
-cat > "${INSTALL_PATH}/docker-compose.yml" <<EOF
-services:
-  backend:
-    image: ghcr.io/magenta-mause/cosy-backend:sha-2d4bdf3
-    container_name: cosy-backend
-    ports:
-      - "127.0.0.1:${BACKEND_PORT}:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    group_add:
-      - "988"
-    environment:
-      - SPRING_DATASOURCE_USERNAME=\${POSTGRES_USER}
-      - SPRING_DATASOURCE_PASSWORD=\${POSTGRES_PASSWORD}
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/cosydb
-      - COSY_ENGINE_DOCKER_SOCKET_PATH=unix:///var/run/docker.sock
-      - COSY_LOKI_URL=http://loki-nginx-proxy:80
-      - COSY_LOKI_USER=\${LOKI_USER}
-      - COSY_LOKI_PASSWORD=\${LOKI_PASSWORD}
-      - COSY_ADMIN_USERNAME=\${COSY_ADMIN_USERNAME}
-      - COSY_ADMIN_PASSWORD=\${COSY_ADMIN_PASSWORD}
-    depends_on:
-      database:
-        condition: service_started
-      loki:
-        condition: service_started
-      loki-nginx-proxy:
-        condition: service_started
-    networks:
-      - cosy-network
-    restart: unless-stopped
-
-  frontend:
-    image: ghcr.io/magenta-mause/cosy-frontend:sha-b006d97
-    container_name: cosy-frontend
-    ports:
-      - "127.0.0.1:${FRONTEND_PORT}:80"
-    depends_on:
-      backend:
-        condition: service_started
-    networks:
-      - cosy-network
-    restart: unless-stopped
-
-  database:
-    image: postgres:16
-    container_name: cosy-database
-    environment:
-      - POSTGRES_DB=cosydb
-      - POSTGRES_USER=\${POSTGRES_USER}
-      - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - cosy-network
-    restart: unless-stopped
-
-  loki:
-    image: grafana/loki:2.9.4
-    container_name: cosy-loki
-    command: -config.file=/etc/loki/loki-config.yaml
-    volumes:
-      - loki-data:/loki
-      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
-    networks:
-      - cosy-network
-    restart: unless-stopped
-
-  loki-nginx-proxy:
-    image: nginx:1.25
-    container_name: cosy-loki-nginx
-    volumes:
-      - ./loki-nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./htpasswd:/etc/nginx/htpasswd:ro
-    networks:
-      - cosy-network
-    depends_on:
-      loki:
-        condition: service_started
-    restart: unless-stopped
-
-volumes:
-  postgres-data:
-  loki-data:
-
-networks:
-  cosy-network:
-EOF
-success "docker-compose.yml created."
-
-# ── loki-config.yaml ────────────────────────────────────────────────────────
-info "Generating Loki configuration..."
-cat > "${INSTALL_PATH}/loki-config.yaml" <<'EOF'
-auth_enabled: false
-
-server:
-  http_listen_port: 3100
-
-common:
-  path_prefix: /loki
-  storage:
-    filesystem:
-      chunks_directory: /loki/chunks
-      rules_directory: /loki/rules
-  replication_factor: 1
-  ring:
-    kvstore:
-      store: inmemory
-
-schema_config:
-  configs:
-    - from: "2020-10-24"
-      store: tsdb
-      object_store: filesystem
-      schema: v13
-      index:
-        prefix: index_
-        period: 24h
-
-limits_config:
-  reject_old_samples: true
-  reject_old_samples_max_age: 168h
-  max_query_series: 100000
-
-analytics:
-  reporting_enabled: false
-EOF
-success "loki-config.yaml created."
-
-# ── loki-nginx.conf ─────────────────────────────────────────────────────────
-info "Generating Loki nginx proxy configuration..."
-cat > "${INSTALL_PATH}/loki-nginx.conf" <<'EOF'
-events {
-    worker_connections 1024;
-}
-
-http {
-    upstream loki {
-        server loki:3100;
-    }
-
-    server {
-        listen 80;
-
-        auth_basic "Loki";
-        auth_basic_user_file /etc/nginx/htpasswd;
-
-        location / {
-            proxy_pass http://loki;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-    }
-}
-EOF
-success "loki-nginx.conf created."
-
 # ── htpasswd ─────────────────────────────────────────────────────────────────
-info "Generating htpasswd for Loki authentication..."
+# Save htpasswd under ${INSTALL_PATH}/config/htpasswd
+HTPASSWD_DIR="${INSTALL_PATH}/config"
+HTPASSWD_PATH="${HTPASSWD_DIR}/htpasswd"
+mkdir -p "${HTPASSWD_DIR}"
+
 # Use openssl or htpasswd to create the password hash
 if command -v htpasswd &>/dev/null; then
-    htpasswd -bc "${INSTALL_PATH}/htpasswd" "$LOKI_USER" "$LOKI_PASSWORD" 2>/dev/null
+    htpasswd -bc "${HTPASSWD_PATH}" "$LOKI_USER" "$LOKI_PASSWORD" 2>/dev/null
 elif command -v openssl &>/dev/null; then
     LOKI_HASH=$(openssl passwd -apr1 "$LOKI_PASSWORD")
-    echo "${LOKI_USER}:${LOKI_HASH}" > "${INSTALL_PATH}/htpasswd"
+    echo "${LOKI_USER}:${LOKI_HASH}" > "${HTPASSWD_PATH}"
 else
     # Fallback: use Python if available
     if command -v python3 &>/dev/null; then
@@ -383,13 +242,58 @@ import crypt, random, string
 salt = '\$apr1\$' + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 print(crypt.crypt('${LOKI_PASSWORD}', salt))
 ")
-        echo "${LOKI_USER}:${LOKI_HASH}" > "${INSTALL_PATH}/htpasswd"
+        echo "${LOKI_USER}:${LOKI_HASH}" > "${HTPASSWD_PATH}"
     else
-        fatal "Cannot generate htpasswd file.\n\n  Install one of the following:\n    - apache2-utils (provides htpasswd)\n    - openssl\n    - python3\n\n  On Debian/Ubuntu: sudo apt-get install apache2-utils"
+        fatal "Cannot generate htpasswd file.\n\n  Install one of the following:\n    - apache2-utils (provides htpasswd)\n    - openssl\n    - python3\n\n"
     fi
 fi
-chmod 600 "${INSTALL_PATH}/htpasswd"
-success "htpasswd created."
+chmod 600 "${HTPASSWD_PATH}"
+success "htpasswd created at ${HTPASSWD_PATH}."
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Fetch config files
+# ─────────────────────────────────────────────────────────────────────────────
+info "Downloading configuration files..."
+
+curl -L -o "${INSTALL_PATH}/config/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/docker/docker-compose.yml" 2>/dev/null || \
+    fatal "Failed to download docker-compose.yml from ${CONFIG_FILES_URL_PREFIX}/docker/docker-compose.yml\n\n  Check your internet connection and try again."
+success "docker-compose.yml downloaded."
+
+curl -L -o "${INSTALL_PATH}/config/loki-config.yaml" "${CONFIG_FILES_URL_PREFIX}/docker/loki-config.yaml" 2>/dev/null || \
+    fatal "Failed to download loki-config.yaml from ${CONFIG_FILES_URL_PREFIX}/docker/loki-config.yaml\n\n  Check your internet connection and try again."
+success "loki-config.yaml downloaded."
+
+curl -L -o "${INSTALL_PATH}/config/loki-nginx.conf" "${CONFIG_FILES_URL_PREFIX}/docker/loki-nginx.conf" 2>/dev/null || \
+    fatal "Failed to download loki-nginx.conf from ${CONFIG_FILES_URL_PREFIX}/docker/loki-nginx.conf\n\n  Check your internet connection and try again."
+success "loki-nginx.conf downloaded."
+
+success "Configuration files downloaded."
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Write .env file for docker-compose
+# ─────────────────────────────────────────────────────────────────────────────
+info "Creating .env file for docker-compose..."
+
+ENV_FILE="${INSTALL_PATH}/config/.env"
+cat > "${ENV_FILE}" <<EOF
+# PostgreSQL credentials
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+# Loki credentials
+LOKI_USER=${LOKI_USER}
+LOKI_PASSWORD=${LOKI_PASSWORD}
+
+# InfluxDB credentials
+COSY_INFLUXDB_USERNAME=${COSY_INFLUXDB_USERNAME}
+COSY_INFLUXDB_PASSWORD=${COSY_INFLUXDB_PASSWORD}
+COSY_INFLUXDB_ADMIN_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
+COSY_INFLUXDB_ORG=cosy-org
+COSY_INFLUXDB_BUCKET=cosy-bucket
+EOF
+
+chmod 600 "${ENV_FILE}"
+success ".env file created at ${ENV_FILE}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Start COSY
@@ -398,10 +302,16 @@ info "Starting COSY services..."
 echo ""
 
 cd "$INSTALL_PATH"
+LOG_DIR="${INSTALL_PATH}/logs"
+mkdir -p "${LOG_DIR}"
+LOG_PATH="${LOG_DIR}/compose-up.log"
 
-if ! $COMPOSE_CMD up -d 2>&1; then
+info "Starting containers with ${COMPOSE_CMD} (output shown below)"
+
+# Stream output to console and save to log; preserve exit status via pipefail
+if ! $COMPOSE_CMD -f "${INSTALL_PATH}/config/docker-compose.yml" --env-file "${ENV_FILE}" up -d 2>&1 | tee "${LOG_PATH}"; then
     echo ""
-    fatal "Failed to start COSY services.\n\n  Troubleshooting steps:\n    1. Check the logs:  cd ${INSTALL_PATH} && ${COMPOSE_CMD} logs\n    2. Ensure Docker has enough resources (RAM, disk space)\n    3. Check if the images can be pulled:  docker pull ghcr.io/magenta-mause/cosy-backend:sha-2d4bdf3\n    4. Verify your internet connection"
+    fatal "Failed to start COSY services.\n\n  Log saved to: ${LOG_PATH}\n\n  Troubleshooting steps:\n    1. Check the logs:  cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs\n    2. Ensure Docker has enough resources (RAM, disk space)\n    3. Check if the images can be pulled:  docker pull ghcr.io/magenta-mause/cosy-backend:sha-2d4bdf3\n    4. Verify your internet connection"
 fi
 
 # ── Wait for services to be healthy ─────────────────────────────────────────
@@ -425,9 +335,7 @@ while [[ $RETRIES -lt $MAX_RETRIES ]]; do
 done
 
 if [[ $RETRIES -ge $MAX_RETRIES ]]; then
-    warn "Services did not become ready within $((MAX_RETRIES * RETRY_INTERVAL)) seconds."
-    warn "They may still be starting up. Check with: cd ${INSTALL_PATH} && ${COMPOSE_CMD} logs -f"
-    echo ""
+    fatal "Services did not become ready within $((MAX_RETRIES * RETRY_INTERVAL)) seconds."
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -435,7 +343,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}╔═══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}${BOLD}║          COSY installation completed successfully!       ║${NC}"
+echo -e "${GREEN}${BOLD}║          COSY installation completed successfully!        ║${NC}"
 echo -e "${GREEN}${BOLD}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${BOLD}Installation path:${NC}  ${INSTALL_PATH}"
@@ -452,7 +360,7 @@ echo ""
 echo -e "  ${YELLOW}⚠  Please save the password above – it will not be shown again.${NC}"
 echo ""
 echo -e "  ${BOLD}Useful commands:${NC}"
-echo -e "    Stop COSY:    cd ${INSTALL_PATH} && ${COMPOSE_CMD} down"
-echo -e "    View logs:    cd ${INSTALL_PATH} && ${COMPOSE_CMD} logs -f"
-echo -e "    Restart:      cd ${INSTALL_PATH} && ${COMPOSE_CMD} restart"
+echo -e "    Stop COSY:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} down"
+echo -e "    View logs:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs -f"
+echo -e "    Restart:      cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} restart"
 echo ""
