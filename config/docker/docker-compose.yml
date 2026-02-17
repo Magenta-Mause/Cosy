@@ -21,10 +21,14 @@ services:
       - COSY_INFLUX_ORG=${COSY_INFLUXDB_ORG:-cosy-org}
       - COSY_INFLUX_BUCKET=${COSY_INFLUXDB_BUCKET:-cosy-bucket}
     depends_on:
-      - database
-      - loki
-      - loki-nginx-proxy
-      - influx
+      database:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      loki-nginx-proxy:
+        condition: service_started
+      influx:
+        condition: service_started
     networks:
       - cosy-network
 
@@ -47,6 +51,11 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - cosy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d cosydb || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   loki:
     image: grafana/loki:2.9.4
