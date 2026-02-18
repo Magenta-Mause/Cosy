@@ -1,18 +1,20 @@
 services:
   backend:
-    image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
+    # image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
+    image: cosy-backend:0.0.1-SNAPSHOT 
     container_name: cosy-backend
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     group_add:
-      - "988"
+      - "968"
     environment:
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/cosydb
       - COSY_ENGINE_DOCKER_SOCKET_PATH=unix:///var/run/docker.sock
+      - COSY_DOCKER_VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
       - COSY_LOKI_URL=http://loki-nginx-proxy:80
       - COSY_LOKI_USER=${LOKI_USER}
       - COSY_LOKI_PASSWORD=${LOKI_PASSWORD}
