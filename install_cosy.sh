@@ -34,11 +34,11 @@ fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
 COSY_TAG="/refs/heads/feature/cosy-50-installation-script" # "v0.0.1"
-FRONTEND_TAG="v0.0.7"
+FRONTEND_TAG="sha-281aad6"
 BACKEND_TAG="v0.0.4"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
-HOST_GID=$(id -g) 
 HOST_UID=$(id -u) 
+DOCKER_GID=$(getent group docker | cut -d: -f3)
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 DEPLOY_METHOD_DEFAULT="docker"
@@ -291,6 +291,7 @@ cat > "${ENV_FILE}" <<EOF
 
 # Deployment configuration
 HOST_UID=${HOST_UID}
+DOCKER_GID=${DOCKER_GID}
 
 # Image tags
 BACKEND_IMAGE_TAG=${BACKEND_TAG}
