@@ -33,10 +33,12 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="v0.0.1"
+COSY_TAG="/refs/heads/feature/cosy-50-installation-script" # "v0.0.1"
 FRONTEND_TAG="v0.0.7"
 BACKEND_TAG="v0.0.4"
-CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy-Internal-Deployment/${COSY_TAG}/"
+CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
+HOST_GID=$(id -g) 
+HOST_UID=$(id -u) 
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 DEPLOY_METHOD_DEFAULT="docker"
@@ -255,19 +257,27 @@ success "htpasswd created at ${HTPASSWD_PATH}."
 # ─────────────────────────────────────────────────────────────────────────────
 info "Downloading configuration files..."
 
-curl -L -o "${INSTALL_PATH}/config/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/docker/docker-compose.yml" 2>/dev/null || \
+curl -L -o "${INSTALL_PATH}/config/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/config/docker/docker-compose.yml" 2>/dev/null || \
     fatal "Failed to download docker-compose.yml from ${CONFIG_FILES_URL_PREFIX}/docker/docker-compose.yml\n\n  Check your internet connection and try again."
 success "docker-compose.yml downloaded."
 
-curl -L -o "${INSTALL_PATH}/config/loki-config.yaml" "${CONFIG_FILES_URL_PREFIX}/docker/loki-config.yaml" 2>/dev/null || \
+curl -L -o "${INSTALL_PATH}/config/loki-config.yaml" "${CONFIG_FILES_URL_PREFIX}/config/docker/loki-config.yaml" 2>/dev/null || \
     fatal "Failed to download loki-config.yaml from ${CONFIG_FILES_URL_PREFIX}/docker/loki-config.yaml\n\n  Check your internet connection and try again."
 success "loki-config.yaml downloaded."
 
-curl -L -o "${INSTALL_PATH}/config/loki-nginx.conf" "${CONFIG_FILES_URL_PREFIX}/docker/loki-nginx.conf" 2>/dev/null || \
+curl -L -o "${INSTALL_PATH}/config/loki-nginx.conf" "${CONFIG_FILES_URL_PREFIX}/config/docker/loki-nginx.conf" 2>/dev/null || \
     fatal "Failed to download loki-nginx.conf from ${CONFIG_FILES_URL_PREFIX}/docker/loki-nginx.conf\n\n  Check your internet connection and try again."
 success "loki-nginx.conf downloaded."
 
 success "Configuration files downloaded."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Create necessary directories 
+# ─────────────────────────────────────────────────────────────────────────────
+
+VOLUME_DIRECTORY="${INSTALL_PATH}/volumes"
+mkdir -p "${VOLUME_DIRECTORY}"
+success "Volume directory created at ${VOLUME_DIRECTORY}."
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Write .env file for docker-compose
@@ -276,6 +286,23 @@ info "Creating .env file for docker-compose..."
 
 ENV_FILE="${INSTALL_PATH}/config/.env"
 cat > "${ENV_FILE}" <<EOF
+# COSY Installer v${SCRIPT_VERSION}
+# Generated on $(date -u +"%Y-%m-%dT%H:%MSZ")
+
+# Deployment configuration
+HOST_UID=${HOST_UID}
+
+# Image tags
+BACKEND_IMAGE_TAG=${BACKEND_TAG}
+FRONTEND_IMAGE_TAG=${FRONTEND_TAG}
+
+# COSY configuration
+ADMIN_USERNAME=${ADMIN_USERNAME}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}    
+FRONTEND_PORT=${FRONTEND_PORT}
+BACKEND_PORT=${BACKEND_PORT}
+VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
+
 # PostgreSQL credentials
 POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -322,7 +349,7 @@ RETRY_INTERVAL=3
 RETRIES=0
 
 while [[ $RETRIES -lt $MAX_RETRIES ]]; do
-    if curl -sf "http://127.0.0.1:${BACKEND_PORT}/actuator/health" &>/dev/null || \
+    if curl -sf "http://127.0.0.1:${BACKEND_PORT}/api/actuator/health" &>/dev/null || \
        curl -sf "http://127.0.0.1:${BACKEND_PORT}" &>/dev/null; then
         break
     fi
