@@ -57,8 +57,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
-      - backend
+      frontend:
+         condition: service_started
+      backend:
+          condition: service_healthy
     networks:
       - cosy-network
 
