@@ -11,11 +11,12 @@ set -euo pipefail
 #   --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)
 #   --username <name>             Admin account username   (default: admin)
 #   --port    <port>              Port for the reverse proxy (default: 80)
+#   --domain  <domain>            Domain for CORS origin   (default: hostname)
 #   --default                     Use defaults for all unset options (non-interactive)
 #   -h, --help                    Show this help message
 # ─────────────────────────────────────────────────────────────────────────────
 
-readonly SCRIPT_VERSION="1.0.0"
+readonly SCRIPT_VERSION="0.1.0"
 
 # ── Color & helpers ────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -45,6 +46,7 @@ DEPLOY_METHOD_DEFAULT="docker"
 INSTALL_PATH_DEFAULT="/opt"
 ADMIN_USERNAME_DEFAULT="admin"
 PORT_DEFAULT="80"
+DOMAIN_DEFAULT=$(cat /etc/hostname 2>/dev/null || echo "localhost")
 
 # ── Parse CLI arguments ─────────────────────────────────────────────────────
 usage() {
@@ -57,6 +59,7 @@ usage() {
     echo "  --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)"
     echo "  --username <name>             Admin account username   (default: admin)"
     echo "  --port    <port>              Port for the reverse proxy (default: 80)"
+    echo "  --domain  <domain>            Domain for CORS origin   (default: ${DOMAIN_DEFAULT})"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -72,6 +75,8 @@ while [[ $# -gt 0 ]]; do
             ADMIN_USERNAME="$2"; shift 2 ;;
         --port)
             PORT="$2"; shift 2 ;;
+        --domain)
+            DOMAIN="$2"; shift 2 ;;
         --default)
             USE_DEFAULTS=true; shift ;;
         -h|--help)
@@ -122,12 +127,19 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       read -rp "Port [${PORT_DEFAULT}]: " input_port
       PORT="${input_port:-$PORT_DEFAULT}"
     fi
+
+    # ── Domain ───────────────────────────────────────────────────────────────
+    if [[ -z "${DOMAIN-}" ]]; then
+      read -rp "Domain [${DOMAIN_DEFAULT}]: " input_domain
+      DOMAIN="${input_domain:-$DOMAIN_DEFAULT}"
+    fi
 fi
 
 # ── Validate deployment method ───────────────────────────────────────────────
 DEPLOY_METHOD="${DEPLOY_METHOD:-$DEPLOY_METHOD_DEFAULT}"
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
+DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
 
 case "$DEPLOY_METHOD" in
     docker) ;;
@@ -298,6 +310,8 @@ FRONTEND_IMAGE_TAG=${FRONTEND_TAG}
 ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 PORT=${PORT}
+# only http is supported for the installation script for now
+COSY_CORS_ALLOWED_ORIGINS=http://${DOMAIN}:${PORT}
 VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
 
 # PostgreSQL credentials
@@ -371,16 +385,16 @@ echo -e "${GREEN}${BOLD}║          COSY installation completed successfully!  
 echo -e "${GREEN}${BOLD}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${BOLD}Installation path:${NC}  ${INSTALL_PATH}"
-echo -e "  ${BOLD}Deployment method:${NC}  Docker"
+echo -e "  ${BOLD}Deployment method:${NC}  ${DEPLOY_METHOD}"
 echo ""
 echo -e "  ${CYAN}${BOLD}── Login Credentials ──────────────────────────────────${NC}"
 echo -e "  ${BOLD}Username:${NC}           ${ADMIN_USERNAME}"
 echo -e "  ${BOLD}Password:${NC}           ${ADMIN_PASSWORD}"
 echo ""
 echo -e "  ${CYAN}${BOLD}── Access URL ────────────────────────────────────────${NC}"
-echo -e "  ${BOLD}COSY:${NC}               ${GREEN}http://localhost:${PORT}${NC}"
+echo -e "  ${BOLD}COSY:${NC}               ${GREEN}http://${DOMAIN}:${PORT}${NC}"
 echo ""
-echo -e "  ${YELLOW}⚠  Please save the password above – it will not be shown again.${NC}"
+echo -e "  ${YELLOW}⚠  Please save the password above - it will not be shown again.${NC}"
 echo ""
 echo -e "  ${BOLD}Useful commands:${NC}"
 echo -e "    Stop COSY:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} down"
