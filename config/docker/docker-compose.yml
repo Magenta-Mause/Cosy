@@ -22,6 +22,8 @@ services:
       - COSY_INFLUX_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
       - COSY_INFLUX_ORG=${COSY_INFLUXDB_ORG:-cosy-org}
       - COSY_INFLUX_BUCKET=${COSY_INFLUXDB_BUCKET:-cosy-bucket}
+      - COSY_DEFAULTS_ADMIN_USERNAME=${ADMIN_USERNAME}
+      - COSY_DEFAULTS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
     depends_on:
       database:
         condition: service_healthy
@@ -33,6 +35,12 @@ services:
         condition: service_started
     networks:
       - cosy-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   frontend:
     image: ghcr.io/magenta-mause/cosy-frontend:${FRONTEND_IMAGE_TAG}
