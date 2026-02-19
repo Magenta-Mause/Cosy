@@ -24,6 +24,7 @@ services:
       - COSY_INFLUX_BUCKET=${COSY_INFLUXDB_BUCKET:-cosy-bucket}
       - COSY_DEFAULTS_ADMIN_USERNAME=${ADMIN_USERNAME}
       - COSY_DEFAULTS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ALLOWED_ORIGINS}
     depends_on:
       database:
         condition: service_healthy
