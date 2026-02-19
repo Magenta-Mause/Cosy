@@ -8,10 +8,10 @@ set -euo pipefail
 #
 # Options:
 #   --method  docker|kubernetes   Deployment method       (default: docker)
-#   --path    /path/to/install    Installation directory   (default: ~/.cosy)
+#   --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)
 #   --username <name>             Admin account username   (default: admin)
-#   --port-frontend <port>        Frontend port            (default: 3000)
-#   --port-backend  <port>        Backend port             (default: 8080)
+#   --port    <port>              Port for the reverse proxy (default: 80)
+#   --default                     Use defaults for all unset options (non-interactive)
 #   -h, --help                    Show this help message
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -42,10 +42,9 @@ DOCKER_GID=$(getent group docker | cut -d: -f3)
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 DEPLOY_METHOD_DEFAULT="docker"
-INSTALL_PATH_DEFAULT="/opt/cosy"
+INSTALL_PATH_DEFAULT="/opt"
 ADMIN_USERNAME_DEFAULT="admin"
-FRONTEND_PORT_DEFAULT="3000"
-BACKEND_PORT_DEFAULT="8080"
+PORT_DEFAULT="80"
 
 # ── Parse CLI arguments ─────────────────────────────────────────────────────
 usage() {
@@ -55,10 +54,10 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --method  docker|kubernetes   Deployment method        (default: docker)"
-    echo "  --path    /path/to/install    Installation directory   (default: /opt/cosy)"
+    echo "  --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)"
     echo "  --username <name>             Admin account username   (default: admin)"
-    echo "  --port-frontend <port>        Frontend port            (default: 3000)"
-    echo "  --port-backend  <port>        Backend port             (default: 8080)"
+    echo "  --port    <port>              Port for the reverse proxy (default: 80)"
+    echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
 }
@@ -71,10 +70,10 @@ while [[ $# -gt 0 ]]; do
             INSTALL_PATH="$2"; shift 2 ;;
         --username)
             ADMIN_USERNAME="$2"; shift 2 ;;
-        --port-frontend)
-            FRONTEND_PORT="$2"; shift 2 ;;
-        --port-backend)
-            BACKEND_PORT="$2"; shift 2 ;;
+        --port)
+            PORT="$2"; shift 2 ;;
+        --default)
+            USE_DEFAULTS=true; shift ;;
         -h|--help)
             usage ;;
         *)
@@ -83,7 +82,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Interactive prompts (if running in a terminal) ───────────────────────────
-if [[ -t 0 ]]; then
+if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     echo -e "${BOLD}${CYAN}"
     echo "  ╔═══════════════════════════════════════╗"
     echo "  ║        COSY Installer v${SCRIPT_VERSION}          ║"
@@ -117,26 +116,18 @@ if [[ -t 0 ]]; then
       ADMIN_USERNAME="${input_user:-$ADMIN_USERNAME_DEFAULT}"
     fi
 
-    # ── Ports ────────────────────────────────────────────────────────────────
+    # ── Port ─────────────────────────────────────────────────────────────────
     # TODO: check if the input is a valid port number (1-65535)
-    if [[ -z "${FRONTEND_PORT-}" ]]; then
-      read -rp "Frontend port [${FRONTEND_PORT_DEFAULT}]: " input_fe_port
-      FRONTEND_PORT="${input_fe_port:-$FRONTEND_PORT_DEFAULT}"
+    if [[ -z "${PORT-}" ]]; then
+      read -rp "Port [${PORT_DEFAULT}]: " input_port
+      PORT="${input_port:-$PORT_DEFAULT}"
     fi
-
-    if [[ -z "${BACKEND_PORT-}" ]]; then
-      read -rp "Backend port [${BACKEND_PORT_DEFAULT}]: " input_be_port
-      BACKEND_PORT="${input_be_port:-$BACKEND_PORT_DEFAULT}"
-    fi
-
-    echo $INSTALL_PATH
-    echo $ADMIN_USERNAME
-    echo $FRONTEND_PORT
-    echo $BACKEND_PORT
 fi
 
 # ── Validate deployment method ───────────────────────────────────────────────
 DEPLOY_METHOD="${DEPLOY_METHOD:-$DEPLOY_METHOD_DEFAULT}"
+PORT="${PORT:-$PORT_DEFAULT}"
+ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 
 case "$DEPLOY_METHOD" in
     docker) ;;
@@ -179,12 +170,11 @@ check_port() {
     local service="$2"
     if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
        netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
-        fatal "Port ${port} (${service}) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port-frontend <port>  (for frontend)\n    $0 --port-backend  <port>  (for backend)"
+        fatal "Port ${port} (${service}) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
     fi
 }
-check_port "$FRONTEND_PORT" "frontend"
-check_port "$BACKEND_PORT" "backend"
-success "Ports ${FRONTEND_PORT} (frontend) and ${BACKEND_PORT} (backend) are available."
+check_port "$PORT" "nginx"
+success "Port ${PORT} is available."
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Generate credentials
@@ -215,8 +205,11 @@ COSY_INFLUXDB_ADMIN_TOKEN="$(generate_password)"
 INSTALL_PATH="${INSTALL_PATH:-$INSTALL_PATH_DEFAULT}"
 if [[ "${INSTALL_PATH}" = ~* ]]; then
     INSTALL_PATH="${INSTALL_PATH/#\~/$HOME}"
+elif [[ "$INSTALL_PATH" != /* ]]; then
+    INSTALL_PATH="$PWD/$INSTALL_PATH"
 fi
 INSTALL_PATH="${INSTALL_PATH%/}"
+INSTALL_PATH="${INSTALL_PATH}/cosy"
 
 info "Creating installation directory: ${INSTALL_PATH}"
 if ! mkdir -p "$INSTALL_PATH" 2>/dev/null; then
@@ -303,9 +296,8 @@ FRONTEND_IMAGE_TAG=${FRONTEND_TAG}
 
 # COSY configuration
 ADMIN_USERNAME=${ADMIN_USERNAME}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}    
-FRONTEND_PORT=${FRONTEND_PORT}
-BACKEND_PORT=${BACKEND_PORT}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+PORT=${PORT}
 VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
 
 # PostgreSQL credentials
@@ -354,8 +346,8 @@ RETRY_INTERVAL=3
 RETRIES=0
 
 while [[ $RETRIES -lt $MAX_RETRIES ]]; do
-    if curl -sf "http://127.0.0.1:${BACKEND_PORT}/api/actuator/health" &>/dev/null || \
-       curl -sf "http://127.0.0.1:${BACKEND_PORT}" &>/dev/null; then
+    if curl -sf "http://127.0.0.1:${PORT}/api/actuator/health" &>/dev/null || \
+       curl -sf "http://127.0.0.1:${PORT}" &>/dev/null; then
         break
     fi
 
@@ -385,9 +377,8 @@ echo -e "  ${CYAN}${BOLD}── Login Credentials ──────────
 echo -e "  ${BOLD}Username:${NC}           ${ADMIN_USERNAME}"
 echo -e "  ${BOLD}Password:${NC}           ${ADMIN_PASSWORD}"
 echo ""
-echo -e "  ${CYAN}${BOLD}── Access URLs ────────────────────────────────────────${NC}"
-echo -e "  ${BOLD}Frontend:${NC}           ${GREEN}http://localhost:${FRONTEND_PORT}${NC}"
-echo -e "  ${BOLD}Backend API:${NC}        http://localhost:${BACKEND_PORT}"
+echo -e "  ${CYAN}${BOLD}── Access URL ────────────────────────────────────────${NC}"
+echo -e "  ${BOLD}COSY:${NC}               ${GREEN}http://localhost:${PORT}${NC}"
 echo ""
 echo -e "  ${YELLOW}⚠  Please save the password above – it will not be shown again.${NC}"
 echo ""
