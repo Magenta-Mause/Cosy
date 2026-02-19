@@ -35,12 +35,6 @@ services:
         condition: service_started
     networks:
       - cosy-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/actuator/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
 
   frontend:
     image: ghcr.io/magenta-mause/cosy-frontend:${FRONTEND_IMAGE_TAG}
@@ -57,10 +51,8 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      frontend:
-         condition: service_started
-      backend:
-          condition: service_healthy
+      - frontend
+      - backend
     networks:
       - cosy-network
 
