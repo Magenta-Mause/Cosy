@@ -3,8 +3,6 @@ services:
     # image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
     image: cosy-backend:0.0.1-SNAPSHOT 
     container_name: cosy-backend
-    ports:
-      - "127.0.0.1:8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${VOLUME_DIRECTORY}:${VOLUME_DIRECTORY}
@@ -38,9 +36,20 @@ services:
 
   frontend:
     image: ghcr.io/magenta-mause/cosy-frontend:${FRONTEND_IMAGE_TAG}
-    ports:
-      - "127.0.0.1:3000:80"
     depends_on:
+      - backend
+    networks:
+      - cosy-network
+
+  nginx:
+    image: nginx:1.25
+    container_name: cosy-nginx
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
       - backend
     networks:
       - cosy-network
