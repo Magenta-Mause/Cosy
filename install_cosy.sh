@@ -198,7 +198,7 @@ generate_password() {
 
 POSTGRES_USER="cosy"
 POSTGRES_PASSWORD="$(generate_password)"
-LOKI_USER="loki"
+LOKI_USER="loki-user"
 LOKI_PASSWORD="$(generate_password)"
 ADMIN_PASSWORD="$(generate_password)"
 COSY_INFLUXDB_USERNAME="cosy"
@@ -249,7 +249,7 @@ print(crypt.crypt('${LOKI_PASSWORD}', salt))
         fatal "Cannot generate htpasswd file.\n\n  Install one of the following:\n    - apache2-utils (provides htpasswd)\n    - openssl\n    - python3\n\n"
     fi
 fi
-chmod 600 "${HTPASSWD_PATH}"
+chmod 644 "${HTPASSWD_PATH}"
 success "htpasswd created at ${HTPASSWD_PATH}."
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -268,6 +268,10 @@ success "loki-config.yaml downloaded."
 curl -L -o "${INSTALL_PATH}/config/loki-nginx.conf" "${CONFIG_FILES_URL_PREFIX}/config/docker/loki-nginx.conf" 2>/dev/null || \
     fatal "Failed to download loki-nginx.conf from ${CONFIG_FILES_URL_PREFIX}/docker/loki-nginx.conf\n\n  Check your internet connection and try again."
 success "loki-nginx.conf downloaded."
+
+curl -L -o "${INSTALL_PATH}/config/nginx.conf" "${CONFIG_FILES_URL_PREFIX}/config/docker/nginx.conf" 2>/dev/null || \
+    fatal "Failed to download nginx.conf from ${CONFIG_FILES_URL_PREFIX}/config/docker/nginx.conf\n\n  Check your internet connection and try again."
+success "nginx.conf downloaded."
 
 success "Configuration files downloaded."
 
