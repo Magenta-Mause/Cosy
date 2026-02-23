@@ -1,7 +1,6 @@
 services:
   backend:
-    # image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
-    image: cosy-backend:0.0.1-SNAPSHOT 
+    image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
     container_name: cosy-backend
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
