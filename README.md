@@ -8,17 +8,14 @@
  ***     
 
 <center>
-    <h3 align="center">
-        Placeholder for some herotext
-    </h3>
     <p align="center">
-        <strong>Latest version:</strong> v.x.x
+        <strong>Latest version:</strong> v.0.1.0
     </p> 
 </center>
 
 ### Features:
 
-- TBA
+- beautiful UI 
 
 ### Quicks Start:
 
