@@ -4,16 +4,13 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────────────────────
 # COSY Installation Script
 # ─────────────────────────────────────────────────────────────────────────────
-# Usage:  ./install_cosy.sh [OPTIONS]
+# Usage:  ./install_cosy.sh <command> [OPTIONS]
 #
-# Options:
-#   --method  docker|kubernetes   Deployment method       (default: docker)
-#   --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)
-#   --username <name>             Admin account username   (default: admin)
-#   --port    <port>              Port for the reverse proxy / CORS     (default: 80)
-#   --domain  <domain>            Domain for CORS / ingress host        (default: hostname)
-#   --default                     Use defaults for all unset options (non-interactive)
-#   -h, --help                    Show this help message
+# Commands:
+#   docker                        Deploy using Docker Compose
+#   kubernetes (k8s)              Deploy to a Kubernetes cluster
+#
+# Run './install_cosy.sh <command> --help' for command-specific options.
 # ─────────────────────────────────────────────────────────────────────────────
 
 readonly SCRIPT_VERSION="0.1.0"
@@ -45,7 +42,6 @@ INFLUXDB_ORG="cosy-org"
 INFLUXDB_BUCKET="cosy-bucket"
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
-DEPLOY_METHOD_DEFAULT="docker"
 INSTALL_PATH_DEFAULT="/opt"
 ADMIN_USERNAME_DEFAULT="admin"
 PORT_DEFAULT="80"
@@ -58,37 +54,84 @@ COMPOSE_CMD="docker compose"
 usage() {
     echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION}${NC}"
     echo ""
-    echo "Usage: $0 [OPTIONS]"
+    echo "Usage: $0 <command> [OPTIONS]"
+    echo ""
+    echo "Commands:"
+    echo "  docker                        Deploy using Docker Compose"
+    echo "  kubernetes, k8s               Deploy to a Kubernetes cluster"
+    echo ""
+    echo "Run '$0 <command> --help' for command-specific options."
     echo ""
     echo "Options:"
-    echo "  --method  docker|kubernetes   Deployment method        (default: docker)"
-    echo "  --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)"
-    echo "  --username <name>             Admin account username   (default: admin)"
-    echo "  --port    <port>              Port for the reverse proxy / CORS     (default: 80)"
-    echo "  --domain  <domain>            Domain for CORS / ingress host        (default: ${DOMAIN_DEFAULT})"
+    echo "  -h, --help                    Show this help message"
+    exit 0
+}
+
+usage_docker() {
+    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION} - Docker deployment${NC}"
+    echo ""
+    echo "Usage: $0 docker [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --path     /path/to/install   Base directory (cosy/ created inside)  (default: /opt)"
+    echo "  --port     <port>             Port for the reverse proxy / CORS     (default: 80)"
+    echo "  --username <name>             Admin account username               (default: admin)"
+    echo "  --domain   <domain>           Domain for CORS configuration        (default: ${DOMAIN_DEFAULT})"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
 }
 
+usage_kubernetes() {
+    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION} – Kubernetes deployment${NC}"
+    echo ""
+    echo "Usage: $0 kubernetes [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --username <name>             Admin account username               (default: admin)"
+    echo "  --domain   <domain>           Domain for CORS / ingress host       (default: ${DOMAIN_DEFAULT})"
+    echo "  --default                     Use defaults for all unset options (non-interactive)"
+    echo "  -h, --help                    Show this help message"
+    exit 0
+}
+
+# ── Parse subcommand ─────────────────────────────────────────────────────────
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+case "$1" in
+    docker)
+        DEPLOY_METHOD="docker"; shift ;;
+    kubernetes|k8s)
+        DEPLOY_METHOD="kubernetes"; shift ;;
+    -h|--help)
+        usage ;;
+    *)
+        fatal "Unknown command: $1\nRun '$0 --help' for usage information." ;;
+esac
+
+# ── Parse flags for the selected command ─────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --method)
-            DEPLOY_METHOD="$2"; shift 2 ;;
+        # ── Docker-only flags ────────────────────────────────────────────────
         --path)
+            [[ "$DEPLOY_METHOD" != "docker" ]] && fatal "--path is only supported for the 'docker' command.\nRun '$0 ${DEPLOY_METHOD} --help' for usage information."
             INSTALL_PATH="$2"; shift 2 ;;
+        --port)
+            [[ "$DEPLOY_METHOD" != "docker" ]] && fatal "--port is only supported for the 'docker' command.\nRun '$0 ${DEPLOY_METHOD} --help' for usage information."
+            PORT="$2"; shift 2 ;;
+        # ── Shared flags ─────────────────────────────────────────────────────
         --username)
             ADMIN_USERNAME="$2"; shift 2 ;;
-        --port)
-            PORT="$2"; shift 2 ;;
         --domain)
             DOMAIN="$2"; shift 2 ;;
         --default)
             USE_DEFAULTS=true; shift ;;
         -h|--help)
-            usage ;;
+            [[ "$DEPLOY_METHOD" == "docker" ]] && usage_docker || usage_kubernetes ;;
         *)
-            fatal "Unknown option: $1\nRun '$0 --help' for usage information." ;;
+            fatal "Unknown option: $1\nRun '$0 ${DEPLOY_METHOD} --help' for usage information." ;;
     esac
 done
 
@@ -99,24 +142,11 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     echo "  ║        COSY Installer v${SCRIPT_VERSION}          ║"
     echo "  ╚═══════════════════════════════════════╝"
     echo -e "${NC}"
+    info "Deployment method: ${DEPLOY_METHOD}"
+    echo ""
 
-    # ── Deployment method ────────────────────────────────────────────────────
-    if [[ -z "${DEPLOY_METHOD-}" ]]; then
-      echo -e "${BOLD}Select deployment method:${NC}"
-      echo "  1) Docker  (recommended)"
-      echo "  2) Kubernetes"
-      echo ""
-      read -rp "Enter choice [1]: " method_choice
-      method_choice="${method_choice:-1}"
-      case "$method_choice" in
-        1) DEPLOY_METHOD="docker" ;;
-        2) DEPLOY_METHOD="kubernetes" ;;
-        *) fatal "Invalid choice '$method_choice'. Please enter 1 or 2." ;;
-      esac
-    fi
-
-    # ── Installation path ────────────────────────────────────────────────────
-    if [[ -z "${INSTALL_PATH-}" ]]; then
+    # ── Installation path (Docker only) ──────────────────────────────────────
+    if [[ "$DEPLOY_METHOD" == "docker" && -z "${INSTALL_PATH-}" ]]; then
       read -rp "Installation path [${INSTALL_PATH_DEFAULT}]: " input_path
       INSTALL_PATH="${input_path:-$INSTALL_PATH_DEFAULT}"
     fi
@@ -127,9 +157,9 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       ADMIN_USERNAME="${input_user:-$ADMIN_USERNAME_DEFAULT}"
     fi
 
-    # ── Port ─────────────────────────────────────────────────────────────────
+    # ── Port (Docker only) ───────────────────────────────────────────────────
     # TODO: check if the input is a valid port number (1-65535)
-    if [[ -z "${PORT-}" ]]; then
+    if [[ "$DEPLOY_METHOD" == "docker" && -z "${PORT-}" ]]; then
       read -rp "Port [${PORT_DEFAULT}]: " input_port
       PORT="${input_port:-$PORT_DEFAULT}"
     fi
@@ -141,20 +171,10 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     fi
 fi
 
-# ── Apply defaults & validate ────────────────────────────────────────────────
-DEPLOY_METHOD="${DEPLOY_METHOD:-$DEPLOY_METHOD_DEFAULT}"
+# ── Apply defaults ───────────────────────────────────────────────────────────
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
-
-case "$DEPLOY_METHOD" in
-    docker|kubernetes|k8s) ;;
-    *)
-        fatal "Unknown deployment method '${DEPLOY_METHOD}'.\n  Supported methods: docker, kubernetes" ;;
-esac
-
-# Normalize "k8s" → "kubernetes"
-[[ "$DEPLOY_METHOD" == "k8s" ]] && DEPLOY_METHOD="kubernetes"
 
 # Build CORS origin and access URL
 if [[ "$PORT" == "80" ]]; then
@@ -685,7 +705,9 @@ echo -e "  ${CYAN}${BOLD}── Access URL ────────────�
 echo -e "  ${BOLD}COSY:${NC}               ${GREEN}${ACCESS_URL}${NC}"
 echo ""
 echo -e "  ${YELLOW}⚠  Please save the password above - it will not be shown again.${NC}"
-echo -e "  ${YELLOW}   Credentials are also saved at: ${INSTALL_PATH}/credentials.txt${NC}"
+if [[ "$DEPLOY_METHOD" == "docker" ]]; then
+    echo -e "  ${YELLOW}   Credentials are also saved at: ${INSTALL_PATH}/credentials.txt${NC}"
+fi
 echo ""
 if [[ "$DEPLOY_METHOD" == "docker" ]]; then
     echo -e "  ${BOLD}Useful commands:${NC}"
