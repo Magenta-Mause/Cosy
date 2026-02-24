@@ -82,7 +82,7 @@ usage_docker() {
 }
 
 usage_kubernetes() {
-    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION} – Kubernetes deployment${NC}"
+    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION} - Kubernetes deployment${NC}"
     echo ""
     echo "Usage: $0 kubernetes [OPTIONS]"
     echo ""
@@ -101,18 +101,18 @@ validate_port() {
     fi
 }
 
-# ── Parse subcommand ─────────────────────────────────────────────────────────
-if [[ $# -eq 0 ]]; then
-    usage
-fi
-
-case "$1" in
+# ── Parse subcommand (optional – prompted interactively if omitted) ────────────
+case "${1-}" in
     docker)
         DEPLOY_METHOD="docker"; shift ;;
     kubernetes|k8s)
         DEPLOY_METHOD="kubernetes"; shift ;;
     -h|--help)
         usage ;;
+    "")
+        ;; # no subcommand – deployment method will be prompted interactively
+    -*)
+        fatal "Please provide a subcommand before any flags.\nRun '$0 --help' for usage information." ;;
     *)
         fatal "Unknown command: $1\nRun '$0 --help' for usage information." ;;
 esac
@@ -148,6 +148,21 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     echo "  ║        COSY Installer v${SCRIPT_VERSION}          ║"
     echo "  ╚═══════════════════════════════════════╝"
     echo -e "${NC}"
+
+    # ── Deployment method ───────────────────────────────────────────────────
+    if [[ -z "${DEPLOY_METHOD-}" ]]; then
+      echo -e "${BOLD}Select deployment method:${NC}"
+      echo "  1) Docker  (default)"
+      echo "  2) Kubernetes"
+      echo ""
+      read -rp "Enter choice [1]: " method_choice
+      case "${method_choice:-1}" in
+        1) DEPLOY_METHOD="docker" ;;
+        2) DEPLOY_METHOD="kubernetes" ;;
+        *) fatal "Invalid choice '${method_choice}'. Please enter 1 or 2." ;;
+      esac
+      echo ""
+    fi
     info "Deployment method: ${DEPLOY_METHOD}"
     echo ""
 
@@ -178,6 +193,7 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
 fi
 
 # ── Apply defaults ───────────────────────────────────────────────────────────
+DEPLOY_METHOD="${DEPLOY_METHOD:-docker}"
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
@@ -226,13 +242,6 @@ print('${user}:' + crypt.crypt('${pass}', salt))
 "
     else
         fatal "Cannot generate htpasswd.\n\n  Install one of: apache2-utils (htpasswd), openssl, or python3."
-    fi
-}
-
-validate_port() {
-    local port="$1"
-    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
-        fatal "Invalid port number: ${port}\n\n  Port must be a number between 1 and 65535."
     fi
 }
 
