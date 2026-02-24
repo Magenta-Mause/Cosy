@@ -16,92 +16,200 @@
     </p> 
 </center>
 
-### TODO
-- docker install script: if not fully uninstalled there should be no message "successfully uninstalled"
-- einige flags machen nur sinn bei docker installation, auch nur dann abfragen
-
 ### Features:
 
 - TBA
 
-### Installation:
+### Quicks Start:
 
-Requirements:
-- `docker` (v29.1.3 was tested, others may work)
-- `docker compose` plugin (or standalone `docker-compose`)
-- One of `htpasswd`, `openssl`, or `python3` (for credential generation)
-
-**Quick install** (interactive, prompts for all options):
+*Install Cosy*:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/main/install_cosy.sh | bash
+curl -fsSL -o install_cosy.sh https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/install_cosy.sh && chmod +x ./install_cosy.sh && sudo ./install_cosy.sh docker
 ```
 
+Remove the `install_cosy.sh` file after the installation.
 
-The installer will:
-1. Check that Docker and Docker Compose are installed and running
-2. Generate all required credentials (database, Loki, InfluxDB, admin account)
-3. Download the Docker Compose configuration files
-4. Write a `.env` file into the installation directory
-5. Start all containers and wait for the backend to become healthy
-6. Print the admin credentials and access URL
+*Uninstall Cosy*:
 
-> ⚠️ **Save the printed password** — it is randomly generated and not stored anywhere else.
+```bash
+curl -fsSL -o uninstall_cosy.sh https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh && chmod +x ./uninstall_cosy.sh && sudo ./uninstall_cosy.sh docker
+```
+
+Remove the `uninstall_cosy.sh` file after the uninstallation.
+
+### Installation:
+
+```
+./install_cosy.sh <command> [OPTIONS]
+```
+
+The deployment method is chosen as a **subcommand** — either `docker` or `kubernetes` (alias `k8s`).
+Each subcommand accepts its own set of flags. Run `./install_cosy.sh <command> --help` to see the available options for a specific method.
+
+If the script is run interactively (in a terminal) without `--default`, it will prompt for any option that was not provided via a flag.
+
+> ⚠️ **Save the printed password** — it is randomly generated and only stored in a credentials file for Docker installs.
 
 ---
 
-### Options (install):
+#### Requirements
 
 <details>
-  <summary>Click to expand</summary>
+  <summary><strong>Docker</strong></summary>
 
-| Option | Description | Default |
-| --- | --- | --- |
-| `--method docker\|kubernetes` | Deployment method. Only `docker` is currently supported; `kubernetes` is planned. | `docker` |
-| `--path /path/to/base` | Base directory to install into. A `cosy/` subdirectory is created inside this path (e.g. `--path /opt` → installs to `/opt/cosy`). Supports `~`, relative paths, and absolute paths. | `/opt` |
-| `--username <name>` | Username for the initial COSY admin account created on first boot. | `admin` |
-| `--port <port>` | Host port the nginx reverse proxy is exposed on. The frontend is served at `/` and the backend API at `/api/` through this port. | `80` |
-| `--domain <domain>` | Domain or hostname used to construct the allowed CORS origin passed to the backend (`<domain>:<port>`). | Value of `/etc/hostname` |
-| `--default` | Skip all interactive prompts and use default values for any option not explicitly set via another flag. Useful for scripted/automated installs. | — |
-| `-h`, `--help` | Print usage information and exit. | — |
+  - `docker` (v29.1.3 was tested, others may work)
+  - `docker compose` plugin (or standalone `docker-compose`)
+  - One of `htpasswd`, `openssl`, or `python3` (for credential generation)
+</details>
 
-**Example — non-interactive install on a custom port and path:**
+<details>
+  <summary><strong>Kubernetes</strong></summary>
 
-```bash
-./install_cosy.sh --port 8080 --domain example.com --default
-```
+  - `kubectl` configured with access to a Kubernetes cluster
+  - An Ingress controller running in the cluster
+  - One of `htpasswd`, `openssl`, or `python3` (for credential generation)
+</details>
+
+---
+
+#### Subcommands
+
+| Command | Description |
+| --- | --- |
+| `docker` | Deploy COSY using Docker Compose. All services run as containers on the host. Configuration files, volumes, and credentials are stored in a local directory. |
+| `kubernetes` (or `k8s`) | Deploy COSY to a Kubernetes cluster. All resources are created inside a dedicated namespace. Manifests are downloaded to a temporary directory and cleaned up automatically. |
+
+---
+
+#### `install_cosy.sh docker`
+
+<details>
+  <summary>Options</summary>
+
+| Flag | Description | Allowed values | Default |
+| --- | --- | --- | --- |
+| `--path /path/to/base` | Base directory to install into. A `cosy/` subdirectory is created inside this path (e.g. `--path /opt` → `/opt/cosy`). Supports `~`, relative paths, and absolute paths. | Any writable directory path | `/opt` |
+| `--port <port>` | Host port cosy is exposed on. | Integer between `1` and `65535` | `80` |
+| `--username <name>` | Username for the initial COSY admin account created on first boot. | Any non-empty string | `admin` |
+| `--domain <domain>` | Domain or hostname used to construct the allowed CORS origin (`http://<domain>:<port>`). Should match the address users will use to access COSY. | Any valid hostname or domain | Value of `/etc/hostname` |
+| `--default` | Skip all interactive prompts and use default values for any option not explicitly provided. Useful for scripted / automated installs. | — | — |
+| `-h`, `--help` | Print the Docker-specific help message and exit. | — | — |
 
 </details>
+
+**Examples:**
+
+```bash
+# Interactive — prompts for all options not provided
+./install_cosy.sh docker
+
+# Non-interactive with custom port and domain
+./install_cosy.sh docker --port 8080 --domain example.com --default
+
+# Custom install path and admin username
+./install_cosy.sh docker --path ~/cosy-install --username myadmin --default
+```
+
+---
+
+#### `install_cosy.sh kubernetes`
+
+details>
+  <summary>Options</summary>
+
+| Flag | Description | Allowed values | Default |
+| --- | --- | --- | --- |
+| `--username <name>` | Username for the initial COSY admin account. | Any non-empty string | `admin` |
+| `--domain <domain>` | Domain used for the Ingress host rules and CORS origin. Must match the DNS name pointing to the cluster's Ingress controller. | Any valid hostname or domain | Value of `/etc/hostname` |
+| `--default` | Skip all interactive prompts and use defaults. | — | — |
+| `-h`, `--help` | Print the Kubernetes-specific help message and exit. | — | — |
+
+</details>
+
+**Examples:**
+
+```bash
+# Interactive
+./install_cosy.sh kubernetes
+
+# Shorthand alias, non-interactive
+./install_cosy.sh k8s --domain cosy.example.com --default
+
+# Custom admin username
+./install_cosy.sh k8s --username myadmin --domain cosy.example.com --default
+```
 
 ---
 
 ### Uninstallation:
 
-```bash
-./uninstall_cosy.sh
+```
+./uninstall_cosy.sh <command> [OPTIONS]
 ```
 
-The uninstaller will:
-1. Locate the `cosy/` directory inside the provided (or default) base path
-2. Run `docker compose down --volumes --remove-orphans` to stop all containers and remove all Docker volumes (database, Loki, InfluxDB)
-3. Force-remove any leftover containers by name
-4. Delete the entire installation directory
+The uninstall method is chosen as a **subcommand** — either `docker` or `kubernetes` (alias `k8s`).
+Run `./uninstall_cosy.sh <command> --help` to see the available options for a specific method.
 
-### Options (uninstall):
+A confirmation prompt is shown before any destructive action unless `-y` / `--yes` is passed.
+
+---
+
+#### `uninstall_cosy.sh docker`
+
+Performs the following steps:
+1. Locates the `cosy/` directory inside the provided (or default) base path
+2. Runs `docker compose down --volumes --remove-orphans` to stop all containers and remove Docker volumes (database, Loki, InfluxDB data)
+3. Force-removes any leftover containers by name
+4. Deletes the entire installation directory
 
 <details>
-  <summary>Click to expand</summary>
+  <summary>Options</summary>
 
-| Option | Description | Default |
-| --- | --- | --- |
-| `--path /path/to/base` | Base directory that contains the `cosy/` folder (same value used during install). | `/opt` |
-| `-y`, `--yes` | Skip the confirmation prompt. Useful for scripted teardowns. | — |
-| `-h`, `--help` | Print usage information and exit. | — |
-
-**Example — non-interactive uninstall from a custom path:**
-
-```bash
-./uninstall_cosy.sh y
-```
+| Flag | Description | Allowed values | Default |
+| --- | --- | --- | --- |
+| `--path /path/to/base` | Base directory that contains the `cosy/` folder. Must be the same value used during installation. | Any directory path | `/opt` |
+| `-y`, `--yes` | Skip the confirmation prompt. Useful for scripted teardowns. | — | — |
+| `-h`, `--help` | Print the Docker-specific help message and exit. | — | — |
 
 </details>
+
+**Examples:**
+
+```bash
+# Interactive — prompts for confirmation
+./uninstall_cosy.sh docker
+
+# Custom path, skip confirmation
+./uninstall_cosy.sh docker --path ~/cosy-install -y
+```
+
+---
+
+#### `uninstall_cosy.sh kubernetes`
+
+Performs the following steps:
+1. Checks that `kubectl` is installed and the cluster is reachable
+2. Verifies the target namespace exists
+3. Deletes the entire Kubernetes namespace, which removes all Deployments, Services, Secrets, PVCs, and other resources within it
+
+<details>
+  <summary>Options</summary>
+
+| Flag | Description | Allowed values | Default |
+| --- | --- | --- | --- |
+| `--namespace <ns>` | The Kubernetes namespace to delete. Must match the namespace used during installation. | Any existing namespace name | `cosy` |
+| `-y`, `--yes` | Skip the confirmation prompt. | — | — |
+| `-h`, `--help` | Print the Kubernetes-specific help message and exit. | — | — |
+
+</details>
+
+**Examples:**
+
+```bash
+# Interactive — prompts for confirmation
+./uninstall_cosy.sh kubernetes
+
+# Shorthand alias, custom namespace, skip confirmation
+./uninstall_cosy.sh k8s --namespace my-cosy-ns -y
+```
