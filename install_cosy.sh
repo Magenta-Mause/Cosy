@@ -31,13 +31,12 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="/refs/heads/feature/cosy-50-installation-script" # "v0.0.1"
+COSY_TAG="v0.0.1"
 FRONTEND_TAG="sha-281aad6"
 BACKEND_TAG="sha-ed7c08f"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
 
-# TODO: change back to K8S_NAMESPACE="cosy"
-K8S_NAMESPACE="cosy-test"
+K8S_NAMESPACE="cosy"
 INFLUXDB_ORG="cosy-org"
 INFLUXDB_BUCKET="cosy-bucket"
 
@@ -93,6 +92,13 @@ usage_kubernetes() {
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
+}
+
+validate_port() {
+    local port="$1"
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+        fatal "Invalid port number: ${port}\n\n  Port must be a number between 1 and 65535."
+    fi
 }
 
 # ── Parse subcommand ─────────────────────────────────────────────────────────
@@ -158,10 +164,10 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     fi
 
     # ── Port (Docker only) ───────────────────────────────────────────────────
-    # TODO: check if the input is a valid port number (1-65535)
     if [[ "$DEPLOY_METHOD" == "docker" && -z "${PORT-}" ]]; then
       read -rp "Port [${PORT_DEFAULT}]: " input_port
       PORT="${input_port:-$PORT_DEFAULT}"
+      validate_port "$PORT"
     fi
 
     # ── Domain ───────────────────────────────────────────────────────────────
@@ -175,6 +181,9 @@ fi
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
+
+# Validate port (only for Docker)
+[[ "$DEPLOY_METHOD" == "docker" ]] && validate_port "$PORT"
 
 # Build CORS origin and access URL
 if [[ "$PORT" == "80" ]]; then
@@ -217,6 +226,13 @@ print('${user}:' + crypt.crypt('${pass}', salt))
 "
     else
         fatal "Cannot generate htpasswd.\n\n  Install one of: apache2-utils (htpasswd), openssl, or python3."
+    fi
+}
+
+validate_port() {
+    local port="$1"
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+        fatal "Invalid port number: ${port}\n\n  Port must be a number between 1 and 65535."
     fi
 }
 
