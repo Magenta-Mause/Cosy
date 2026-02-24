@@ -16,6 +16,10 @@
     </p> 
 </center>
 
+### TODO
+- docker install script: if not fully uninstalled there should be no message "successfully uninstalled"
+- einige flags machen nur sinn bei docker installation, auch nur dann abfragen
+
 ### Features:
 
 - TBA

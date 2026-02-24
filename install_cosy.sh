@@ -10,8 +10,8 @@ set -euo pipefail
 #   --method  docker|kubernetes   Deployment method       (default: docker)
 #   --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)
 #   --username <name>             Admin account username   (default: admin)
-#   --port    <port>              Port for the reverse proxy (default: 80)
-#   --domain  <domain>            Domain for CORS origin   (default: hostname)
+#   --port    <port>              Port for the reverse proxy / CORS     (default: 80)
+#   --domain  <domain>            Domain for CORS / ingress host        (default: hostname)
 #   --default                     Use defaults for all unset options (non-interactive)
 #   -h, --help                    Show this help message
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,10 +36,13 @@ fatal()   { error "$*"; exit 1; }
 # ── Constants ────────────────────────────────────────────────────────────────
 COSY_TAG="/refs/heads/feature/cosy-50-installation-script" # "v0.0.1"
 FRONTEND_TAG="sha-281aad6"
-BACKEND_TAG="v0.0.4"
+BACKEND_TAG="sha-ed7c08f"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
-HOST_UID=$(id -u) 
-DOCKER_GID=$(getent group docker | cut -d: -f3)
+
+# TODO: change back to K8S_NAMESPACE="cosy"
+K8S_NAMESPACE="cosy-test"
+INFLUXDB_ORG="cosy-org"
+INFLUXDB_BUCKET="cosy-bucket"
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 DEPLOY_METHOD_DEFAULT="docker"
@@ -47,6 +50,9 @@ INSTALL_PATH_DEFAULT="/opt"
 ADMIN_USERNAME_DEFAULT="admin"
 PORT_DEFAULT="80"
 DOMAIN_DEFAULT=$(cat /etc/hostname 2>/dev/null || echo "localhost")
+
+# Initialized here; overridden during Docker pre-flight check
+COMPOSE_CMD="docker compose"
 
 # ── Parse CLI arguments ─────────────────────────────────────────────────────
 usage() {
@@ -58,8 +64,8 @@ usage() {
     echo "  --method  docker|kubernetes   Deployment method        (default: docker)"
     echo "  --path    /path/to/install    Base directory (cosy/ created inside)  (default: /opt)"
     echo "  --username <name>             Admin account username   (default: admin)"
-    echo "  --port    <port>              Port for the reverse proxy (default: 80)"
-    echo "  --domain  <domain>            Domain for CORS origin   (default: ${DOMAIN_DEFAULT})"
+    echo "  --port    <port>              Port for the reverse proxy / CORS     (default: 80)"
+    echo "  --domain  <domain>            Domain for CORS / ingress host        (default: ${DOMAIN_DEFAULT})"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -114,7 +120,7 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       read -rp "Installation path [${INSTALL_PATH_DEFAULT}]: " input_path
       INSTALL_PATH="${input_path:-$INSTALL_PATH_DEFAULT}"
     fi
-    
+
     # ── Admin username ───────────────────────────────────────────────────────
     if [[ -z "${ADMIN_USERNAME-}" ]]; then
       read -rp "Admin username [${ADMIN_USERNAME_DEFAULT}]: " input_user
@@ -135,69 +141,96 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     fi
 fi
 
-# ── Validate deployment method ───────────────────────────────────────────────
+# ── Apply defaults & validate ────────────────────────────────────────────────
 DEPLOY_METHOD="${DEPLOY_METHOD:-$DEPLOY_METHOD_DEFAULT}"
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
 
 case "$DEPLOY_METHOD" in
-    docker) ;;
-    kubernetes|k8s)
-        fatal "Kubernetes deployment is not yet implemented.\n  Kubernetes support is planned for a future release.\n  Please use '--method docker' for now." ;;
+    docker|kubernetes|k8s) ;;
     *)
-        fatal "Unknown deployment method '${DEPLOY_METHOD}'.\n  Supported methods: docker\n  Kubernetes support is planned for a future release." ;;
+        fatal "Unknown deployment method '${DEPLOY_METHOD}'.\n  Supported methods: docker, kubernetes" ;;
 esac
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Pre-flight checks
-# ─────────────────────────────────────────────────────────────────────────────
+# Normalize "k8s" → "kubernetes"
+[[ "$DEPLOY_METHOD" == "k8s" ]] && DEPLOY_METHOD="kubernetes"
 
-# ── Check Docker is installed ────────────────────────────────────────────────
-if ! command -v docker &>/dev/null; then
-    fatal "Docker is not installed or not in PATH.\n\n  To install Docker, follow the official guide:\n    https://docs.docker.com/engine/install/\n\n  After installation, make sure your user is in the 'docker' group:\n    sudo usermod -aG docker \$USER\n  Then log out and log back in."
-fi
-success "Docker found: $(docker --version)"
-
-# ── Check Docker daemon is running ──────────────────────────────────────────
-if ! docker info &>/dev/null; then
-    fatal "Docker daemon is not running.\n\n  Try starting it with:\n    sudo systemctl start docker\n\n  If the issue persists, check:\n    sudo systemctl status docker"
-fi
-success "Docker daemon is running."
-
-# ── Check Docker Compose is available ────────────────────────────────────────
-if docker compose version &>/dev/null; then
-    COMPOSE_CMD="docker compose"
-    success "Docker Compose (plugin) found: $(docker compose version --short 2>/dev/null || echo 'available')"
-elif command -v docker-compose &>/dev/null; then
-    COMPOSE_CMD="docker-compose"
-    success "Docker Compose (standalone) found: $(docker-compose --version)"
+# Build CORS origin and access URL
+if [[ "$PORT" == "80" ]]; then
+    COSY_CORS_ORIGIN="http://${DOMAIN}"
+    ACCESS_URL="http://${DOMAIN}"
 else
-    fatal "Docker Compose is not installed.\n\n Make sure either the `docker compose` or `docker-compose` command is available."
+    COSY_CORS_ORIGIN="http://${DOMAIN}:${PORT}"
+    ACCESS_URL="http://${DOMAIN}:${PORT}"
 fi
 
-# ── Check port availability ──────────────────────────────────────────────────
-check_port() {
-    local port="$1"
-    local service="$2"
-    if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
-       netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
-        fatal "Port ${port} (${service}) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
-    fi
+# ─────────────────────────────────────────────────────────────────────────────
+#  Shared helpers
+# ─────────────────────────────────────────────────────────────────────────────
+K8S_TEMP_DIR=""
+setup_k8s_temp_dir() {
+    K8S_TEMP_DIR=$(mktemp -d) || fatal "Could not create temporary directory for K8s manifests"
+    trap "rm -rf '$K8S_TEMP_DIR' 2>/dev/null; exit" EXIT
+    info "K8s manifests will be downloaded to: ${K8S_TEMP_DIR}"
 }
-check_port "$PORT" "nginx"
-success "Port ${PORT} is available."
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Generate credentials
-# ─────────────────────────────────────────────────────────────────────────────
 generate_password() {
-  # Generate a 30-character alphanumeric password robust to SIGPIPE.
   local pw
   pw=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 30) || true
   printf '%s' "$pw"
 }
 
+generate_htpasswd() {
+    local user="$1" pass="$2"
+    if command -v htpasswd &>/dev/null; then
+        htpasswd -nb "$user" "$pass" 2>/dev/null
+    elif command -v openssl &>/dev/null; then
+        local hash
+        hash=$(openssl passwd -apr1 "$pass")
+        echo "${user}:${hash}"
+    elif command -v python3 &>/dev/null; then
+        python3 -c "
+import crypt, random, string
+salt = '\$apr1\$' + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+print('${user}:' + crypt.crypt('${pass}', salt))
+"
+    else
+        fatal "Cannot generate htpasswd.\n\n  Install one of: apache2-utils (htpasswd), openssl, or python3."
+    fi
+}
+
+save_credentials_file() {
+    local creds_file="${INSTALL_PATH}/credentials.txt"
+    cat > "$creds_file" <<EOF
+# COSY Credentials - Generated by Installer v${SCRIPT_VERSION}
+# Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# ⚠  Keep this file secure!
+
+DEPLOY_METHOD=${DEPLOY_METHOD}
+
+ADMIN_USERNAME=${ADMIN_USERNAME}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+LOKI_USER=${LOKI_USER}
+LOKI_PASSWORD=${LOKI_PASSWORD}
+
+COSY_INFLUXDB_USERNAME=${COSY_INFLUXDB_USERNAME}
+COSY_INFLUXDB_PASSWORD=${COSY_INFLUXDB_PASSWORD}
+COSY_INFLUXDB_ADMIN_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
+
+COSY_CORS_ORIGIN=${COSY_CORS_ORIGIN}
+EOF
+    chmod 600 "$creds_file"
+    success "Credentials saved to ${creds_file}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Generate credentials (shared by all deployment methods)
+# ─────────────────────────────────────────────────────────────────────────────
 POSTGRES_USER="cosy"
 POSTGRES_PASSWORD="$(generate_password)"
 LOKI_USER="loki-user"
@@ -208,99 +241,111 @@ COSY_INFLUXDB_PASSWORD="$(generate_password)"
 COSY_INFLUXDB_ADMIN_TOKEN="$(generate_password)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Create installation directory
+#  Normalize installation path (called during deployment)
 # ─────────────────────────────────────────────────────────────────────────────
-# Normalize the installation path so concatenations are predictable:
-# - Use default if unset
-# - Expand leading tilde (~) to $HOME
-# - Strip any trailing slashes
-INSTALL_PATH="${INSTALL_PATH:-$INSTALL_PATH_DEFAULT}"
-if [[ "${INSTALL_PATH}" = ~* ]]; then
-    INSTALL_PATH="${INSTALL_PATH/#\~/$HOME}"
-elif [[ "$INSTALL_PATH" != /* ]]; then
-    INSTALL_PATH="$PWD/$INSTALL_PATH"
-fi
-INSTALL_PATH="${INSTALL_PATH%/}"
-INSTALL_PATH="${INSTALL_PATH}/cosy"
-
-info "Creating installation directory: ${INSTALL_PATH}"
-if ! mkdir -p "$INSTALL_PATH" 2>/dev/null; then
-    fatal "Could not create directory '${INSTALL_PATH}'.\n\n  Make sure you have write permissions, or choose a different path:\n    $0 --path /some/other/path"
-fi
-success "Installation directory ready."
-
-# ── htpasswd ─────────────────────────────────────────────────────────────────
-# Save htpasswd under ${INSTALL_PATH}/config/htpasswd
-HTPASSWD_DIR="${INSTALL_PATH}/config"
-HTPASSWD_PATH="${HTPASSWD_DIR}/htpasswd"
-mkdir -p "${HTPASSWD_DIR}"
-
-# Use openssl or htpasswd to create the password hash
-if command -v htpasswd &>/dev/null; then
-    htpasswd -bc "${HTPASSWD_PATH}" "$LOKI_USER" "$LOKI_PASSWORD" 2>/dev/null
-elif command -v openssl &>/dev/null; then
-    LOKI_HASH=$(openssl passwd -apr1 "$LOKI_PASSWORD")
-    echo "${LOKI_USER}:${LOKI_HASH}" > "${HTPASSWD_PATH}"
-else
-    # Fallback: use Python if available
-    if command -v python3 &>/dev/null; then
-        LOKI_HASH=$(python3 -c "
-import crypt, random, string
-salt = '\$apr1\$' + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-print(crypt.crypt('${LOKI_PASSWORD}', salt))
-")
-        echo "${LOKI_USER}:${LOKI_HASH}" > "${HTPASSWD_PATH}"
-    else
-        fatal "Cannot generate htpasswd file.\n\n  Install one of the following:\n    - apache2-utils (provides htpasswd)\n    - openssl\n    - python3\n\n"
+normalize_install_path() {
+    INSTALL_PATH="${INSTALL_PATH:-$INSTALL_PATH_DEFAULT}"
+    if [[ "${INSTALL_PATH}" = ~* ]]; then
+        INSTALL_PATH="${INSTALL_PATH/#\~/$HOME}"
+    elif [[ "$INSTALL_PATH" != /* ]]; then
+        INSTALL_PATH="$PWD/$INSTALL_PATH"
     fi
-fi
-chmod 644 "${HTPASSWD_PATH}"
-success "htpasswd created at ${HTPASSWD_PATH}."
+    INSTALL_PATH="${INSTALL_PATH%/}"
+    INSTALL_PATH="${INSTALL_PATH}/cosy"
+}
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Fetch config files
-# ─────────────────────────────────────────────────────────────────────────────
-info "Downloading configuration files..."
+setup_installation_directory() {
+    info "Creating installation directory: ${INSTALL_PATH}"
+    if ! mkdir -p "$INSTALL_PATH" 2>/dev/null; then
+        fatal "Could not create directory '${INSTALL_PATH}'.\n\n  Make sure you have write permissions, or choose a different path:\n    $0 --path /some/other/path"
+    fi
+    success "Installation directory ready."
+}
 
-curl -L -o "${INSTALL_PATH}/config/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/config/docker/docker-compose.yml" 2>/dev/null || \
-    fatal "Failed to download docker-compose.yml from ${CONFIG_FILES_URL_PREFIX}/docker/docker-compose.yml\n\n  Check your internet connection and try again."
-success "docker-compose.yml downloaded."
 
-curl -L -o "${INSTALL_PATH}/config/loki-config.yaml" "${CONFIG_FILES_URL_PREFIX}/config/docker/loki-config.yaml" 2>/dev/null || \
-    fatal "Failed to download loki-config.yaml from ${CONFIG_FILES_URL_PREFIX}/docker/loki-config.yaml\n\n  Check your internet connection and try again."
-success "loki-config.yaml downloaded."
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██████╗  ██████╗  ██████╗██╗  ██╗███████╗██████╗
+# ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗
+# ██║  ██║██║   ██║██║     █████╔╝ █████╗  ██████╔╝
+# ██║  ██║██║   ██║██║     ██╔═██╗ ██╔══╝  ██╔══██╗
+# ██████╔╝╚██████╔╝╚██████╗██║  ██╗███████╗██║  ██║
+# ╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+# ═══════════════════════════════════════════════════════════════════════════════
 
-curl -L -o "${INSTALL_PATH}/config/loki-nginx.conf" "${CONFIG_FILES_URL_PREFIX}/config/docker/loki-nginx.conf" 2>/dev/null || \
-    fatal "Failed to download loki-nginx.conf from ${CONFIG_FILES_URL_PREFIX}/docker/loki-nginx.conf\n\n  Check your internet connection and try again."
-success "loki-nginx.conf downloaded."
+# ── Docker: Pre-flight checks ───────────────────────────────────────────────
+check_docker_prerequisites() {
+    if ! command -v docker &>/dev/null; then
+        fatal "Docker is not installed or not in PATH.\n\n  To install Docker, follow the official guide:\n    https://docs.docker.com/engine/install/\n\n  After installation, make sure your user is in the 'docker' group:\n    sudo usermod -aG docker \$USER\n  Then log out and log back in."
+    fi
+    success "Docker found: $(docker --version)"
 
-curl -L -o "${INSTALL_PATH}/config/nginx.conf" "${CONFIG_FILES_URL_PREFIX}/config/docker/nginx.conf" 2>/dev/null || \
-    fatal "Failed to download nginx.conf from ${CONFIG_FILES_URL_PREFIX}/config/docker/nginx.conf\n\n  Check your internet connection and try again."
-success "nginx.conf downloaded."
+    if ! docker info &>/dev/null; then
+        fatal "Docker daemon is not running.\n\n  Try starting it with:\n    sudo systemctl start docker\n\n  If the issue persists, check:\n    sudo systemctl status docker"
+    fi
+    success "Docker daemon is running."
 
-success "Configuration files downloaded."
+    if docker compose version &>/dev/null; then
+        COMPOSE_CMD="docker compose"
+        success "Docker Compose (plugin) found: $(docker compose version --short 2>/dev/null || echo 'available')"
+    elif command -v docker-compose &>/dev/null; then
+        COMPOSE_CMD="docker-compose"
+        success "Docker Compose (standalone) found: $(docker-compose --version)"
+    else
+        fatal "Docker Compose is not installed.\n\n  Make sure either the \`docker compose\` or \`docker-compose\` command is available."
+    fi
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Create necessary directories 
-# ─────────────────────────────────────────────────────────────────────────────
+    if ss -tlnp 2>/dev/null | grep -q ":${PORT} " || \
+       netstat -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+        fatal "Port ${PORT} (nginx) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
+    fi
+    success "Port ${PORT} is available."
+}
 
-VOLUME_DIRECTORY="${INSTALL_PATH}/volumes"
-mkdir -p "${VOLUME_DIRECTORY}"
-success "Volume directory created at ${VOLUME_DIRECTORY}."
+# ── Docker: Write htpasswd file ─────────────────────────────────────────────
+write_docker_htpasswd() {
+    local htpasswd_dir="${INSTALL_PATH}/config"
+    local htpasswd_path="${htpasswd_dir}/htpasswd"
+    mkdir -p "$htpasswd_dir"
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Write .env file for docker-compose
-# ─────────────────────────────────────────────────────────────────────────────
-info "Creating .env file for docker-compose..."
+    local htpasswd_line
+    htpasswd_line=$(generate_htpasswd "$LOKI_USER" "$LOKI_PASSWORD")
+    echo "$htpasswd_line" > "$htpasswd_path"
+    chmod 644 "$htpasswd_path"
+    success "htpasswd created at ${htpasswd_path}."
+}
 
-ENV_FILE="${INSTALL_PATH}/config/.env"
-cat > "${ENV_FILE}" <<EOF
+# ── Docker: Download configuration files ────────────────────────────────────
+download_docker_configs() {
+    info "Downloading configuration files..."
+    local config_dir="${INSTALL_PATH}/config"
+    mkdir -p "$config_dir"
+
+    local -a files=("docker-compose.yml" "loki-config.yaml" "loki-nginx.conf" "nginx.conf")
+    for f in "${files[@]}"; do
+        curl -L -o "${config_dir}/${f}" "${CONFIG_FILES_URL_PREFIX}/config/docker/${f}" 2>/dev/null \
+            || fatal "Failed to download ${f} from ${CONFIG_FILES_URL_PREFIX}/config/docker/${f}\n\n  Check your internet connection and try again."
+        success "${f} downloaded."
+    done
+    success "All configuration files downloaded."
+}
+
+# ── Docker: Write .env file for docker-compose ──────────────────────────────
+write_docker_env_file() {
+    info "Creating .env file for docker-compose..."
+    local env_file="${INSTALL_PATH}/config/.env"
+
+    local host_uid docker_gid volume_dir
+    host_uid=$(id -u)
+    docker_gid=$(getent group docker | cut -d: -f3)
+    volume_dir="${INSTALL_PATH}/volumes"
+
+    cat > "$env_file" <<EOF
 # COSY Installer v${SCRIPT_VERSION}
-# Generated on $(date -u +"%Y-%m-%dT%H:%MSZ")
+# Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Deployment configuration
-HOST_UID=${HOST_UID}
-DOCKER_GID=${DOCKER_GID}
+HOST_UID=${host_uid}
+DOCKER_GID=${docker_gid}
 
 # Image tags
 BACKEND_IMAGE_TAG=${BACKEND_TAG}
@@ -310,9 +355,8 @@ FRONTEND_IMAGE_TAG=${FRONTEND_TAG}
 ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 PORT=${PORT}
-# only http is supported for the installation script for now
-COSY_CORS_ALLOWED_ORIGINS=http://${DOMAIN}:${PORT}
-VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
+COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ORIGIN}
+VOLUME_DIRECTORY=${volume_dir}
 
 # PostgreSQL credentials
 POSTGRES_USER=${POSTGRES_USER}
@@ -326,55 +370,296 @@ LOKI_PASSWORD=${LOKI_PASSWORD}
 COSY_INFLUXDB_USERNAME=${COSY_INFLUXDB_USERNAME}
 COSY_INFLUXDB_PASSWORD=${COSY_INFLUXDB_PASSWORD}
 COSY_INFLUXDB_ADMIN_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
-COSY_INFLUXDB_ORG=cosy-org
-COSY_INFLUXDB_BUCKET=cosy-bucket
+COSY_INFLUXDB_ORG=${INFLUXDB_ORG}
+COSY_INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
 EOF
 
-chmod 600 "${ENV_FILE}"
-success ".env file created at ${ENV_FILE}"
+    chmod 600 "$env_file"
+    success ".env file created at ${env_file}"
+}
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Start COSY
-# ─────────────────────────────────────────────────────────────────────────────
-info "Starting COSY services..."
-echo ""
-
-cd "$INSTALL_PATH"
-LOG_DIR="${INSTALL_PATH}/logs"
-mkdir -p "${LOG_DIR}"
-LOG_PATH="${LOG_DIR}/compose-up.log"
-
-info "Starting containers with ${COMPOSE_CMD} (output shown below)"
-
-# Stream output to console and save to log; preserve exit status via pipefail
-if ! $COMPOSE_CMD -f "${INSTALL_PATH}/config/docker-compose.yml" --env-file "${ENV_FILE}" up -d 2>&1 | tee "${LOG_PATH}"; then
+# ── Docker: Start services ──────────────────────────────────────────────────
+start_docker_services() {
+    info "Starting COSY services..."
     echo ""
-    fatal "Failed to start COSY services.\n\n  Log saved to: ${LOG_PATH}\n\n  Troubleshooting steps:\n    1. Check the logs:  cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs\n    2. Ensure Docker has enough resources (RAM, disk space)\n    3. Check if the images can be pulled:  docker pull ghcr.io/magenta-mause/cosy-backend:sha-2d4bdf3\n    4. Verify your internet connection"
-fi
+    cd "$INSTALL_PATH"
 
-# ── Wait for services to be healthy ─────────────────────────────────────────
-info "Waiting for services to become ready..."
+    local log_dir="${INSTALL_PATH}/logs"
+    mkdir -p "$log_dir"
+    local log_path="${log_dir}/compose-up.log"
+    local env_file="${INSTALL_PATH}/config/.env"
 
-MAX_RETRIES=60
-RETRY_INTERVAL=3
-RETRIES=0
+    info "Starting containers with ${COMPOSE_CMD} (output shown below)"
+    if ! $COMPOSE_CMD -f "${INSTALL_PATH}/config/docker-compose.yml" --env-file "$env_file" up -d 2>&1 | tee "$log_path"; then
+        echo ""
+        fatal "Failed to start COSY services.\n\n  Log saved to: ${log_path}\n\n  Troubleshooting steps:\n    1. Check the logs:  cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs\n    2. Ensure Docker has enough resources (RAM, disk space)\n    3. Verify your internet connection"
+    fi
+}
 
-while [[ $RETRIES -lt $MAX_RETRIES ]]; do
-    if curl -sf "http://127.0.0.1:${PORT}/api/actuator/health" &>/dev/null || \
-       curl -sf "http://127.0.0.1:${PORT}" &>/dev/null; then
-        break
+# ── Docker: Wait for health ─────────────────────────────────────────────────
+wait_for_docker_health() {
+    info "Waiting for services to become ready..."
+    local max_retries=60 interval=3 retries=0
+
+    while [[ $retries -lt $max_retries ]]; do
+        if curl -sf "http://127.0.0.1:${PORT}/api/actuator/health" &>/dev/null || \
+           curl -sf "http://127.0.0.1:${PORT}" &>/dev/null; then
+            break
+        fi
+        retries=$((retries + 1))
+        if [[ $((retries % 10)) -eq 0 ]]; then
+            info "Still waiting... (${retries}/${max_retries})"
+        fi
+        sleep "$interval"
+    done
+
+    if [[ $retries -ge $max_retries ]]; then
+        fatal "Services did not become ready within $((max_retries * interval)) seconds."
+    fi
+}
+
+# ── Docker: Main deployment function ────────────────────────────────────────
+deploy_docker() {
+    normalize_install_path
+    setup_installation_directory
+    check_docker_prerequisites
+    write_docker_htpasswd
+    download_docker_configs
+
+    mkdir -p "${INSTALL_PATH}/volumes"
+    success "Volume directory created."
+
+    write_docker_env_file
+    save_credentials_file
+    start_docker_services
+    wait_for_docker_health
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██╗  ██╗ █████╗ ███████╗
+# ██║ ██╔╝██╔══██╗██╔════╝
+# █████╔╝ ╚█████╔╝███████╗
+# ██╔═██╗ ██╔══██╗╚════██║
+# ██║  ██╗╚█████╔╝███████║
+# ╚═╝  ╚═╝ ╚════╝ ╚══════╝
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── K8s: Download manifests ────────────────────────────────────────────────
+download_k8s_manifests() {
+    info "Downloading K8s manifests..."
+    
+    # Define all manifest files to download
+    local -A manifest_files=(
+        [postgres]="pvc.yaml service.yaml statefulset.yaml"
+        [loki]="configmap.yaml pvc.yaml deployment.yaml service.yaml"
+        [loki-nginx]="configmap.yaml deployment.yaml service.yaml"
+        [influxdb]="pvc-data.yaml pvc-config.yaml deployment.yaml service.yaml"
+        [backend]="deployment.yaml service.yaml"
+        [frontend]="deployment.yaml service.yaml"
+        [ingress]="frontend.yaml backend.yaml"
+    )
+    
+    for subdir in "${!manifest_files[@]}"; do
+        mkdir -p "${K8S_TEMP_DIR}/${subdir}"
+        for file in ${manifest_files[$subdir]}; do
+            curl -L -o "${K8S_TEMP_DIR}/${subdir}/${file}" "${CONFIG_FILES_URL_PREFIX}/config/k8s/${subdir}/${file}" 2>/dev/null \
+                || fatal "Failed to download ${subdir}/${file}\n\n  Check your internet connection and try again."
+            success "  ${subdir}/${file} downloaded."
+        done
+    done
+    success "All K8s manifests downloaded."
+}
+
+# ── K8s: Pre-flight checks ──────────────────────────────────────────────────
+check_k8s_prerequisites() {
+    if ! command -v kubectl &>/dev/null; then
+        fatal "kubectl is not installed or not in PATH.\n\n  To install kubectl, follow the official guide:\n    https://kubernetes.io/docs/tasks/tools/"
+    fi
+    success "kubectl found: $(kubectl version --client 2>/dev/null | head -1)"
+
+    # If running under sudo, try to reuse the original user's kubeconfig
+    if [[ -n "${SUDO_USER-}" && -z "${KUBECONFIG-}" ]]; then
+      original_home=$(getent passwd "$SUDO_USER" | cut -d: -f6 || true)
+      if [[ -n "$original_home" && -f "$original_home/.kube/config" ]]; then
+        export KUBECONFIG="$original_home/.kube/config"
+        info "Using KUBECONFIG from ${original_home}/.kube/config (SUDO_USER=${SUDO_USER})"
+      fi
     fi
 
-    RETRIES=$((RETRIES + 1))
-    if [[ $((RETRIES % 10)) -eq 0 ]]; then
-        info "Still waiting... (${RETRIES}/${MAX_RETRIES})"
+    if ! kubectl get nodes &>/dev/null; then
+      fatal "Cannot connect to a Kubernetes cluster.\n\n  Make sure your kubeconfig is set up correctly:\n    kubectl cluster-info"
     fi
-    sleep "$RETRY_INTERVAL"
-done
+      success "Kubernetes cluster is reachable."
+}
 
-if [[ $RETRIES -ge $MAX_RETRIES ]]; then
-    fatal "Services did not become ready within $((MAX_RETRIES * RETRY_INTERVAL)) seconds."
-fi
+# ── K8s: Create namespace ───────────────────────────────────────────────────
+create_k8s_namespace() {
+    info "Creating namespace '${K8S_NAMESPACE}'..."
+    kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    success "Namespace '${K8S_NAMESPACE}' ready."
+}
+
+# ── K8s: Create secrets ─────────────────────────────────────────────────────
+create_k8s_secrets() {
+    info "Creating Kubernetes secrets in namespace '${K8S_NAMESPACE}'..."
+
+    # PostgreSQL credentials
+    kubectl create secret generic cosy-postgresql-credentials \
+        --namespace="$K8S_NAMESPACE" \
+        --from-literal=postgresql-username="$POSTGRES_USER" \
+        --from-literal=postgresql-password="$POSTGRES_PASSWORD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    success "Secret 'cosy-postgresql-credentials' created."
+
+    # Loki credentials (used by the backend to authenticate with the loki nginx proxy)
+    kubectl create secret generic cosy-loki-credentials \
+        --namespace="$K8S_NAMESPACE" \
+        --from-literal=user="$LOKI_USER" \
+        --from-literal=password="$LOKI_PASSWORD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    success "Secret 'cosy-loki-credentials' created."
+
+    # Loki htpasswd (mounted as a file by the nginx auth proxy)
+    local htpasswd_line
+    htpasswd_line=$(generate_htpasswd "$LOKI_USER" "$LOKI_PASSWORD")
+    kubectl create secret generic loki-htpasswd \
+        --namespace="$K8S_NAMESPACE" \
+        --from-literal=htpasswd="$htpasswd_line" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    success "Secret 'loki-htpasswd' created."
+
+    # InfluxDB secrets
+    kubectl create secret generic cosy-influxdb-secrets \
+        --namespace="$K8S_NAMESPACE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$COSY_INFLUXDB_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$COSY_INFLUXDB_ADMIN_TOKEN" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    success "Secret 'cosy-influxdb-secrets' created."
+
+    # Application secrets (admin credentials)
+    kubectl create secret generic cosy-app-secrets \
+        --namespace="$K8S_NAMESPACE" \
+        --from-literal=admin-username="$ADMIN_USERNAME" \
+        --from-literal=admin-password="$ADMIN_PASSWORD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    success "Secret 'cosy-app-secrets' created."
+}
+
+# ── K8s: PostgreSQL (StatefulSet + Service + PVC) ────────────────────────────
+apply_k8s_postgres() {
+    info "Deploying PostgreSQL..."
+    kubectl apply -n "$K8S_NAMESPACE" -f "${K8S_TEMP_DIR}/postgres/"
+    info "PostgreSQL deployed."
+}
+
+# ── K8s: Loki (Deployment + Service + PVC + ConfigMap) ───────────────────────
+apply_k8s_loki() {
+    info "Deploying Loki..."
+    kubectl apply -n "$K8S_NAMESPACE" -f "${K8S_TEMP_DIR}/loki/"
+    info "Loki deployed."
+}
+
+# ── K8s: Loki nginx auth proxy (Deployment + Service + ConfigMap) ────────────
+apply_k8s_loki_nginx_proxy() {
+    info "Deploying Loki nginx auth proxy..."
+    kubectl apply -n "$K8S_NAMESPACE" -f "${K8S_TEMP_DIR}/loki-nginx/"
+    info "Loki nginx auth proxy deployed."
+}
+
+# ── K8s: InfluxDB (Deployment + Service + PVCs) ─────────────────────────────
+apply_k8s_influxdb() {
+    info "Deploying InfluxDB..."
+    local manifest_dir="${K8S_TEMP_DIR}/influxdb"
+    # Replace placeholders with actual values in all files
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s/INFLUXDB_BUCKET_PLACEHOLDER/${INFLUXDB_BUCKET}/g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s/INFLUXDB_ORG_PLACEHOLDER/${INFLUXDB_ORG}/g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s/COSY_INFLUXDB_USERNAME_PLACEHOLDER/${COSY_INFLUXDB_USERNAME}/g" {} \;
+    kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
+    info "InfluxDB deployed."
+}
+
+# ── K8s: Backend (Deployment + Service) ──────────────────────────────────────
+apply_k8s_backend() {
+    info "Deploying backend..."
+    local manifest_dir="${K8S_TEMP_DIR}/backend"
+    # Replace placeholders with actual values in all files
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|BACKEND_TAG_PLACEHOLDER|${BACKEND_TAG}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|INFLUXDB_ORG_PLACEHOLDER|${INFLUXDB_ORG}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|INFLUXDB_BUCKET_PLACEHOLDER|${INFLUXDB_BUCKET}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|COSY_CORS_ORIGIN_PLACEHOLDER|${COSY_CORS_ORIGIN}|g" {} \;
+    kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
+    info "Backend deployed."
+}
+
+# ── K8s: Frontend (Deployment + Service) ─────────────────────────────────────
+apply_k8s_frontend() {
+    info "Deploying frontend..."
+    local manifest_dir="${K8S_TEMP_DIR}/frontend"
+    # Replace placeholders with actual values in all files
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|FRONTEND_TAG_PLACEHOLDER|${FRONTEND_TAG}|g" {} \;
+    kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
+    info "Frontend deployed."
+}
+
+# ── K8s: Ingresses (dynamically generated with the configured domain) ────────
+apply_k8s_ingresses() {
+    info "Creating ingresses for domain '${DOMAIN}'..."
+    local manifest_dir="${K8S_TEMP_DIR}/ingress"
+    # Replace domain placeholder with actual domain in all files
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|DOMAIN_PLACEHOLDER|${DOMAIN}|g" {} \;
+    kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
+    info "Ingresses created for '${DOMAIN}'."
+}
+
+# ── K8s: Wait for all workloads to become ready ─────────────────────────────
+wait_for_k8s_ready() {
+    info "Waiting for all pods to become ready..."
+
+    local -a deployments=("cosy-backend" "cosy-frontend" "cosy-loki" "cosy-loki-nginx" "cosy-influxdb")
+    for name in "${deployments[@]}"; do
+        info "  Waiting for deployment/${name}..."
+        if ! kubectl rollout status deployment/"$name" -n "$K8S_NAMESPACE" --timeout=300s 2>/dev/null; then
+            warn "Deployment '${name}' did not become ready within timeout."
+        fi
+    done
+
+    info "  Waiting for statefulset/cosy-postgres..."
+    if ! kubectl rollout status statefulset/cosy-postgres -n "$K8S_NAMESPACE" --timeout=180s 2>/dev/null; then
+        warn "StatefulSet 'cosy-postgres' did not become ready within timeout."
+    fi
+
+    success "All Kubernetes resources deployed."
+}
+
+# ── K8s: Main deployment function ────────────────────────────────────────────
+deploy_kubernetes() {
+    check_k8s_prerequisites
+    setup_k8s_temp_dir
+    create_k8s_namespace
+    create_k8s_secrets
+    download_k8s_manifests
+
+    info "Applying Kubernetes manifests..."
+    apply_k8s_postgres
+    apply_k8s_loki
+    apply_k8s_loki_nginx_proxy
+    apply_k8s_influxdb
+    apply_k8s_backend
+    apply_k8s_frontend
+    apply_k8s_ingresses
+    wait_for_k8s_ready
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Dispatch & Summary
+# ═══════════════════════════════════════════════════════════════════════════════
+
+case "$DEPLOY_METHOD" in
+    docker)     deploy_docker ;;
+    kubernetes) deploy_kubernetes ;;
+esac
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Success summary
@@ -384,20 +669,34 @@ echo -e "${GREEN}${BOLD}╔═════════════════�
 echo -e "${GREEN}${BOLD}║          COSY installation completed successfully!        ║${NC}"
 echo -e "${GREEN}${BOLD}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}Installation path:${NC}  ${INSTALL_PATH}"
+if [[ "$DEPLOY_METHOD" == "docker" ]]; then
+    echo -e "  ${BOLD}Installation path:${NC}  ${INSTALL_PATH}"
+fi
 echo -e "  ${BOLD}Deployment method:${NC}  ${DEPLOY_METHOD}"
+if [[ "$DEPLOY_METHOD" == "kubernetes" ]]; then
+    echo -e "  ${BOLD}Namespace:${NC}          ${K8S_NAMESPACE}"
+fi
 echo ""
 echo -e "  ${CYAN}${BOLD}── Login Credentials ──────────────────────────────────${NC}"
 echo -e "  ${BOLD}Username:${NC}           ${ADMIN_USERNAME}"
 echo -e "  ${BOLD}Password:${NC}           ${ADMIN_PASSWORD}"
 echo ""
 echo -e "  ${CYAN}${BOLD}── Access URL ────────────────────────────────────────${NC}"
-echo -e "  ${BOLD}COSY:${NC}               ${GREEN}http://${DOMAIN}:${PORT}${NC}"
+echo -e "  ${BOLD}COSY:${NC}               ${GREEN}${ACCESS_URL}${NC}"
 echo ""
 echo -e "  ${YELLOW}⚠  Please save the password above - it will not be shown again.${NC}"
+echo -e "  ${YELLOW}   Credentials are also saved at: ${INSTALL_PATH}/credentials.txt${NC}"
 echo ""
-echo -e "  ${BOLD}Useful commands:${NC}"
-echo -e "    Stop COSY:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} down"
-echo -e "    View logs:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs -f"
-echo -e "    Restart:      cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} restart"
+if [[ "$DEPLOY_METHOD" == "docker" ]]; then
+    echo -e "  ${BOLD}Useful commands:${NC}"
+    echo -e "    Stop COSY:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} down"
+    echo -e "    View logs:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs -f"
+    echo -e "    Restart:      cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} restart"
+else
+    echo -e "  ${BOLD}Useful commands:${NC}"
+    echo -e "    Get pods:     kubectl get pods -n ${K8S_NAMESPACE}"
+    echo -e "    View logs:    kubectl logs -n ${K8S_NAMESPACE} deployment/cosy-backend"
+    echo -e "    Restart:      kubectl rollout restart -n ${K8S_NAMESPACE} deployment/cosy-backend"
+    echo -e "    Uninstall:    kubectl delete namespace ${K8S_NAMESPACE}"
+fi
 echo ""
