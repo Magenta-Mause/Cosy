@@ -33,7 +33,7 @@ fatal()   { error "$*"; exit 1; }
 # ── Constants ────────────────────────────────────────────────────────────────
 COSY_TAG="v0.0.1"
 FRONTEND_TAG="sha-281aad6"
-BACKEND_TAG="sha-ed7c08f"
+BACKEND_TAG="sha-97bb89b"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
 
 K8S_NAMESPACE="cosy"

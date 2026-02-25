@@ -60,12 +60,12 @@ spec:
               value: "INFLUXDB_ORG_PLACEHOLDER"
             - name: COSY_INFLUX_BUCKET
               value: "INFLUXDB_BUCKET_PLACEHOLDER"
-            - name: COSY_DEFAULTS_ADMIN_USERNAME
+            - name: COSY_DEFAULTS_OWNER_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: cosy-app-secrets
                   key: admin-username
-            - name: COSY_DEFAULTS_ADMIN_PASSWORD
+            - name: COSY_DEFAULTS_OWNER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: cosy-app-secrets
