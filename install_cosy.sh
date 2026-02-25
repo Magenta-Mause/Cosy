@@ -234,14 +234,8 @@ generate_htpasswd() {
         local hash
         hash=$(openssl passwd -apr1 "$pass")
         echo "${user}:${hash}"
-    elif command -v python3 &>/dev/null; then
-        python3 -c "
-import crypt, random, string
-salt = '\$apr1\$' + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-print('${user}:' + crypt.crypt('${pass}', salt))
-"
     else
-        fatal "Cannot generate htpasswd.\n\n  Install one of: apache2-utils (htpasswd), openssl, or python3."
+        fatal "Cannot generate htpasswd.\n\n  Install one of: apache2-utils (htpasswd) or openssl."
     fi
 }
 
