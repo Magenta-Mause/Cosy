@@ -72,6 +72,16 @@ spec:
                   key: admin-password
             - name: COSY_CORS_ALLOWED_ORIGINS
               value: "COSY_CORS_ORIGIN_PLACEHOLDER"
+            - name: COSY_FOOTER_FULL_NAME
+              value: "FOOTER_FULL_NAME_PLACEHOLDER"
+            - name: COSY_FOOTER_EMAIL
+              value: "FOOTER_EMAIL_PLACEHOLDER"
+            - name: COSY_FOOTER_PHONE
+              value: "FOOTER_PHONE_PLACEHOLDER"
+            - name: COSY_FOOTER_STREET
+              value: "FOOTER_STREET_PLACEHOLDER"
+            - name: COSY_FOOTER_CITY
+              value: "FOOTER_CITY_PLACEHOLDER"
             - name: RCON_HOST
               valueFrom:
                 fieldRef:

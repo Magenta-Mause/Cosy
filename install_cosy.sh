@@ -33,8 +33,8 @@ fatal()   { error "$*"; exit 1; }
 # ── Constants ────────────────────────────────────────────────────────────────
 # COSY_TAG="v0.0.1"
 COSY_TAG="refs/heads/feature/cosy-50-installation-script/"
-FRONTEND_TAG="sha-281aad6"
-BACKEND_TAG="sha-97bb89b"
+FRONTEND_TAG="sha-1762097"
+BACKEND_TAG="sha-6c42655"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
 
 K8S_NAMESPACE="cosy"
@@ -77,6 +77,11 @@ usage_docker() {
     echo "  --port     <port>             Port for the reverse proxy / CORS     (default: 80)"
     echo "  --username <name>             Admin account username               (default: admin)"
     echo "  --domain   <domain>           Domain for CORS configuration        (default: ${DOMAIN_DEFAULT})"
+    echo "  --footer-fullname <name>      Footer contact full name             (default: empty)"
+    echo "  --footer-email    <email>     Footer contact email                 (default: empty)"
+    echo "  --footer-phone    <phone>     Footer contact phone number          (default: empty)"
+    echo "  --footer-street   <street>    Footer contact street address        (default: empty)"
+    echo "  --footer-city     <city>      Footer contact city                  (default: empty)"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -90,6 +95,11 @@ usage_kubernetes() {
     echo "Options:"
     echo "  --username <name>             Admin account username               (default: admin)"
     echo "  --domain   <domain>           Domain for CORS / ingress host       (default: ${DOMAIN_DEFAULT})"
+    echo "  --footer-fullname <name>      Footer contact full name             (default: empty)"
+    echo "  --footer-email    <email>     Footer contact email                 (default: empty)"
+    echo "  --footer-phone    <phone>     Footer contact phone number          (default: empty)"
+    echo "  --footer-street   <street>    Footer contact street address        (default: empty)"
+    echo "  --footer-city     <city>      Footer contact city                  (default: empty)"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -133,6 +143,16 @@ while [[ $# -gt 0 ]]; do
             ADMIN_USERNAME="$2"; shift 2 ;;
         --domain)
             DOMAIN="$2"; shift 2 ;;
+        --footer-fullname)
+            FOOTER_FULL_NAME="$2"; shift 2 ;;
+        --footer-email)
+            FOOTER_EMAIL="$2"; shift 2 ;;
+        --footer-phone)
+            FOOTER_PHONE="$2"; shift 2 ;;
+        --footer-street)
+            FOOTER_STREET="$2"; shift 2 ;;
+        --footer-city)
+            FOOTER_CITY="$2"; shift 2 ;;
         --default)
             USE_DEFAULTS=true; shift ;;
         -h|--help)
@@ -224,6 +244,32 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       read -rp "Domain [default: ${DOMAIN_DEFAULT}]: " input_domain
       DOMAIN="${input_domain:-$DOMAIN_DEFAULT}"
     fi
+
+    # ── Footer fields ────────────────────────────────────────────────────────
+    if [[ -z "${FOOTER_FULL_NAME-}" ]]; then
+      read -rp "Footer full name [default: empty]: " input_footer_fullname
+      FOOTER_FULL_NAME="${input_footer_fullname:-}"
+    fi
+
+    if [[ -z "${FOOTER_EMAIL-}" ]]; then
+      read -rp "Footer email [default: empty]: " input_footer_email
+      FOOTER_EMAIL="${input_footer_email:-}"
+    fi
+
+    if [[ -z "${FOOTER_PHONE-}" ]]; then
+      read -rp "Footer phone [default: empty]: " input_footer_phone
+      FOOTER_PHONE="${input_footer_phone:-}"
+    fi
+
+    if [[ -z "${FOOTER_STREET-}" ]]; then
+      read -rp "Footer street [default: empty]: " input_footer_street
+      FOOTER_STREET="${input_footer_street:-}"
+    fi
+
+    if [[ -z "${FOOTER_CITY-}" ]]; then
+      read -rp "Footer city [default: empty]: " input_footer_city
+      FOOTER_CITY="${input_footer_city:-}"
+    fi
 fi
 
 # ── Apply defaults ───────────────────────────────────────────────────────────
@@ -231,6 +277,11 @@ DEPLOY_METHOD="${DEPLOY_METHOD:-docker}"
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
+FOOTER_FULL_NAME="${FOOTER_FULL_NAME:-}"
+FOOTER_EMAIL="${FOOTER_EMAIL:-}"
+FOOTER_PHONE="${FOOTER_PHONE:-}"
+FOOTER_STREET="${FOOTER_STREET:-}"
+FOOTER_CITY="${FOOTER_CITY:-}"
 
 # Validate port (only for Docker)
 [[ "$DEPLOY_METHOD" == "docker" ]] && validate_port "$PORT"
@@ -445,6 +496,13 @@ COSY_INFLUXDB_PASSWORD=${COSY_INFLUXDB_PASSWORD}
 COSY_INFLUXDB_ADMIN_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
 COSY_INFLUXDB_ORG=${INFLUXDB_ORG}
 COSY_INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+
+# Footer configuration
+FOOTER_FULL_NAME=${FOOTER_FULL_NAME}
+FOOTER_EMAIL=${FOOTER_EMAIL}
+FOOTER_PHONE=${FOOTER_PHONE}
+FOOTER_STREET=${FOOTER_STREET}
+FOOTER_CITY=${FOOTER_CITY}
 EOF
 
     chmod 600 "$env_file"
@@ -661,6 +719,11 @@ apply_k8s_backend() {
     find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|INFLUXDB_ORG_PLACEHOLDER|${INFLUXDB_ORG}|g" {} \;
     find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|INFLUXDB_BUCKET_PLACEHOLDER|${INFLUXDB_BUCKET}|g" {} \;
     find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|COSY_CORS_ORIGIN_PLACEHOLDER|${COSY_CORS_ORIGIN}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|FOOTER_FULL_NAME_PLACEHOLDER|${FOOTER_FULL_NAME}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|FOOTER_EMAIL_PLACEHOLDER|${FOOTER_EMAIL}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|FOOTER_PHONE_PLACEHOLDER|${FOOTER_PHONE}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|FOOTER_STREET_PLACEHOLDER|${FOOTER_STREET}|g" {} \;
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|FOOTER_CITY_PLACEHOLDER|${FOOTER_CITY}|g" {} \;
     kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
     info "Backend deployed."
 }
