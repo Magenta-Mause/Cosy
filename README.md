@@ -9,15 +9,48 @@
 
 <center>
     <p align="center">
-        <strong>Latest version:</strong> v.0.1.0
+        <strong>Latest version:</strong> v0.1.0
     </p> 
 </center>
 
+### TODO
+- cool badges in begining of readme
+
 ### Features:
 
-- beautiful UI 
+- beautiful UI
+- containerized game server management on self hosted node
+- simple creation of game servers from templates
+- start stop with realtime status
+- real-time monitoring and dashboards
+- send remote commands to your game server
+- file management
+- user und quota management
+- custom metrics API to push custom game server metrics to your game server dashboard
+- multi-user collaboration with fine-grained permissions
+- event-driven webhooks to subscribe your own services to server lifecycle events
 
-### Quicks Start:
+---
+
+### Security
+
+**Docker Socket Access**
+
+When deploying COSY, the installation script configures the application to run with access to the Docker socket (`/var/run/docker.sock`). This grants COSY **root-equivalent privileges** on the host system.
+
+**Implications:**
+- COSY can start, stop, inspect, and manage any Docker container on the host
+- COSY can access container images, volumes, and networks
+- COSY can execute arbitrary commands with root privileges (via container execution)
+
+**Security Recommendations:**
+- Only deploy COSY in trusted environments (internal networks, private infrastructure)
+- Run COSY on dedicated hosts or in isolated environments when possible
+- Regularly update COSY
+
+---
+
+### Quick Start
 
 *Install Cosy*:
 
@@ -57,7 +90,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 
   - `docker` (v29.1.3 was tested, others may work)
   - `docker compose` plugin (or standalone `docker-compose`)
-  - One of `htpasswd`, `openssl`, or `python3` (for credential generation)
+  - One of `htpasswd` or `openssl` (for credential generation)
 </details>
 
 <details>
@@ -66,6 +99,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
   - `kubectl` configured with access to a Kubernetes cluster
   - An Ingress controller running in the cluster
   - One of `htpasswd`, `openssl`, or `python3` (for credential generation)
+  - each node in the cluster must have docker installed
 </details>
 
 ---
@@ -112,7 +146,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 
 #### `install_cosy.sh kubernetes`
 
-details>
+<details>
   <summary>Options</summary>
 
 | Flag | Description | Allowed values | Default |
