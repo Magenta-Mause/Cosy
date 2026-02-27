@@ -10,9 +10,6 @@
     <h3 align="center">
         Simple and beautiful way to host servers for videogames on your own hardware.
     </h3>
-    <p align="center">
-        <strong>Latest version:</strong> v0.1.0
-    </p> 
 </center>
 
 <p align="center">
