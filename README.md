@@ -6,12 +6,15 @@
 
 
  ***     
-
 <center>
+    <h3 align="center">
+        Simple and beautiful way to host servers for videogames on you own hardware.
+    </h3>
     <p align="center">
         <strong>Latest version:</strong> v0.1.0
     </p> 
 </center>
+
 
 ### TODO
 - cool badges in begining of readme
