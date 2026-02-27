@@ -46,6 +46,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
   frontend:
     image: ghcr.io/magenta-mause/cosy-frontend:${FRONTEND_IMAGE_TAG}
@@ -58,6 +59,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
   nginx:
     image: nginx:1.25
@@ -76,6 +78,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
   database:
     image: postgres:16
@@ -97,6 +100,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
   loki:
     image: grafana/loki:2.9.4
@@ -112,6 +116,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
   loki-nginx-proxy:
     image: nginx:1.25
@@ -128,6 +133,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
   influx:
     image: influxdb:2.7-alpine
@@ -149,6 +155,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    restart: unless-stopped
 
 volumes:
   influx_data:
