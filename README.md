@@ -8,16 +8,30 @@
  ***     
 <center>
     <h3 align="center">
-        Simple and beautiful way to host servers for videogames on you own hardware.
+        Simple and beautiful way to host servers for videogames on your own hardware.
     </h3>
     <p align="center">
         <strong>Latest version:</strong> v0.1.0
     </p> 
 </center>
 
-
-### TODO
-- cool badges in begining of readme
+<p align="center">
+  <a href="https://opensource.org/licenses/mit">
+    <img src="https://img.shields.io/github/license/Magenta-Mause/Cosy" alt="License of medals" />
+  </a>
+  <a href="https://github.com/Magenta-Mause/Cosy/releases">
+    <img src="https://img.shields.io/github/v/release/Magenta-Mause/Cosy" alt="Newest Release" />
+  </a> 
+  <a href="https://github.com/Magenta-Mause/Cosy-Templates">
+    <img src="https://img.shields.io/badge/github-templates--repository-blue?logo=github">
+  </a>
+  <a href="https://cosy-docs.jannekeipert.de/">
+    <img src="https://img.shields.io/badge/Home%20Page-F7951D" alt="Home Page" />
+  </a>
+  <a href="https://github.com/Magenta-Mause/Cosy-Templates/tree/main/templates">
+    <img src="https://img.shields.io/github/directory-file-count/Magenta-Mause/Cosy-Templates/templates?label=Supported%20Games" alt="Supported Games">
+  </a>
+</p>
 
 ### Features:
 
