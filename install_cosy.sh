@@ -31,7 +31,8 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="v0.0.1"
+# COSY_TAG="v0.0.1"
+COSY_TAG="refs/heads/feature/cosy-50-installation-script/"
 FRONTEND_TAG="sha-281aad6"
 BACKEND_TAG="sha-97bb89b"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
@@ -188,7 +189,7 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       echo "  1) Docker  (default)"
       echo "  2) Kubernetes"
       echo ""
-      read -rp "Enter choice [1]: " method_choice
+      read -rp "Enter choice [default: 1]: " method_choice
       case "${method_choice:-1}" in
         1) DEPLOY_METHOD="docker" ;;
         2) DEPLOY_METHOD="kubernetes" ;;
@@ -201,26 +202,26 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
 
     # ── Installation path (Docker only) ──────────────────────────────────────
     if [[ "$DEPLOY_METHOD" == "docker" && -z "${INSTALL_PATH-}" ]]; then
-      read -rp "Installation path [${INSTALL_PATH_DEFAULT}]: " input_path
+      read -rp "Installation path [default: ${INSTALL_PATH_DEFAULT}]: " input_path
       INSTALL_PATH="${input_path:-$INSTALL_PATH_DEFAULT}"
     fi
 
     # ── Admin username ───────────────────────────────────────────────────────
     if [[ -z "${ADMIN_USERNAME-}" ]]; then
-      read -rp "Admin username [${ADMIN_USERNAME_DEFAULT}]: " input_user
+      read -rp "Admin username [default: ${ADMIN_USERNAME_DEFAULT}]: " input_user
       ADMIN_USERNAME="${input_user:-$ADMIN_USERNAME_DEFAULT}"
     fi
 
     # ── Port (Docker only) ───────────────────────────────────────────────────
     if [[ "$DEPLOY_METHOD" == "docker" && -z "${PORT-}" ]]; then
-      read -rp "Port [${PORT_DEFAULT}]: " input_port
+      read -rp "Port [default: ${PORT_DEFAULT}]: " input_port
       PORT="${input_port:-$PORT_DEFAULT}"
       validate_port "$PORT"
     fi
 
     # ── Domain ───────────────────────────────────────────────────────────────
     if [[ -z "${DOMAIN-}" ]]; then
-      read -rp "Domain [${DOMAIN_DEFAULT}]: " input_domain
+      read -rp "Domain [default: ${DOMAIN_DEFAULT}]: " input_domain
       DOMAIN="${input_domain:-$DOMAIN_DEFAULT}"
     fi
 fi
