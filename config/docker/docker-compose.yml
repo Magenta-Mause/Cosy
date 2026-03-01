@@ -4,7 +4,7 @@ services:
     container_name: cosy-backend
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${VOLUME_DIRECTORY}:${VOLUME_DIRECTORY}
+      - ${VOLUME_DIRECTORY}:/opt/cosy/volume-mounts
     group_add:
       - ${DOCKER_GID}
     user: "0:0"
@@ -14,6 +14,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/cosydb
       - COSY_ENGINE_DOCKER_SOCKET_PATH=unix:///var/run/docker.sock
       - COSY_DOCKER_VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
+      - COSY_DOCKER_BACKEND_VOLUME_MOUNT_PATH=/opt/cosy/volume-mounts
       - COSY_LOKI_URL=http://loki-nginx-proxy:80
       - COSY_LOKI_USER=${LOKI_USER}
       - COSY_LOKI_PASSWORD=${LOKI_PASSWORD}
