@@ -1,6 +1,6 @@
 <p align="center">
     <a href="https://cosy-docs.jannekeipert.de">
-        <img src="./.github/images/logo.gif">
+        <img src="./.github/images/logo.gif" width="400">
     </a>
 </p>
 
