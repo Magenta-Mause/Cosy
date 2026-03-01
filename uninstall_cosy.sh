@@ -29,8 +29,7 @@ fatal()   { error "$*"; exit 1; }
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 INSTALL_PATH_DEFAULT="/opt"
-# TODO: change back to K8S_NAMESPACE_DEFAULT="cosy"
-K8S_NAMESPACE_DEFAULT="cosy-test"
+K8S_NAMESPACE_DEFAULT="cosy"
 SKIP_CONFIRM=false
 
 # ── Help messages ────────────────────────────────────────────────────────────
