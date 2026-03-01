@@ -69,7 +69,7 @@ When deploying COSY, the installation script configures the application to run w
 *Install Cosy*:
 
 ```bash
-curl -fsSL -o install_cosy.sh https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/install_cosy.sh && chmod +x ./install_cosy.sh && sudo ./install_cosy.sh docker
+curl -fsSL -o install_cosy.sh https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/install_cosy.sh && chmod +x ./install_cosy.sh && sudo ./install_cosy.sh
 ```
 
 Remove the `install_cosy.sh` file after the installation.
@@ -77,7 +77,7 @@ Remove the `install_cosy.sh` file after the installation.
 *Uninstall Cosy*:
 
 ```bash
-curl -fsSL -o uninstall_cosy.sh https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh && chmod +x ./uninstall_cosy.sh && sudo ./uninstall_cosy.sh docker
+curl -fsSL -o uninstall_cosy.sh https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh && chmod +x ./uninstall_cosy.sh && sudo ./uninstall_cosy.sh <installation method of your choice>
 ```
 
 Remove the `uninstall_cosy.sh` file after the uninstallation.
