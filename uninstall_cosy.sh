@@ -76,17 +76,17 @@ usage_kubernetes() {
 }
 
 # ── Parse subcommand ─────────────────────────────────────────────────────────
-if [[ $# -eq 0 ]]; then
-    usage
-fi
-
-case "$1" in
+case "${1-}" in
     docker)
         UNINSTALL_METHOD="docker"; shift ;;
     kubernetes|k8s)
         UNINSTALL_METHOD="kubernetes"; shift ;;
     -h|--help)
         usage ;;
+    "")
+        ;; # no subcommand – deployment method will be prompted interactively
+    -*)
+        fatal "Please provide a subcommand before any flags.\nRun '$0 --help' for usage information." ;;
     *)
         fatal "Unknown command: $1\nRun '$0 --help' for usage information." ;;
 esac
@@ -112,6 +112,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]] then
+    if [[ -z "${UNINSTALL_METHOD-}" ]]; then
+      echo -e "${BOLD}Select uninstallation method:${NC}"
+      echo "  1) Docker  (default)"
+      echo "  2) Kubernetes"
+      echo ""
+      read -rp "Enter choice [default: 1]: " method_choice
+      case "${method_choice:-1}" in
+        1) UNINSTALL_METHOD="docker" ;;
+        2) UNINSTALL_METHOD="kubernetes" ;;
+        *) fatal "Invalid choice '${method_choice}'. Please enter 1 or 2." ;;
+      esac
+      echo ""
+    fi
+    info "Uninstallation method: ${UNINSTALL_METHOD}"
+    echo ""
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Docker uninstallation
