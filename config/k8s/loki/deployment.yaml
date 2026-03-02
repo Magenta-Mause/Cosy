@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosy-loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cosy-loki
+  template:
+    metadata:
+      labels:
+        app: cosy-loki
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:2.9.4
+          args:
+            - -config.file=/etc/loki/loki-config.yaml
+          ports:
+            - containerPort: 3100
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: data
+              mountPath: /loki
+      volumes:
+        - name: config
+          configMap:
+            name: cosy-loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: cosy-loki-data

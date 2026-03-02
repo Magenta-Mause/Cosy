@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosy-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cosy-frontend
+  template:
+    metadata:
+      labels:
+        app: cosy-frontend
+    spec:
+      containers:
+        - name: cosy-frontend
+          image: ghcr.io/magenta-mause/cosy-frontend:FRONTEND_TAG_PLACEHOLDER
+          ports:
+            - containerPort: 80
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5

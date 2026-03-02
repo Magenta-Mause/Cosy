@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cosy-backend
+spec:
+  selector:
+    app: cosy-backend
+  ports:
+    - port: 80        # inside the cluster
+      targetPort: 8080
+      nodePort: 30080 # to make the backend reachable from the host (needed for custom metrics support)
+      protocol: TCP
+  type: NodePort

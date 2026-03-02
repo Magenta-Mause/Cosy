@@ -1,0 +1,170 @@
+services:
+  backend:
+    image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
+    container_name: cosy-backend
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${VOLUME_DIRECTORY}:/opt/cosy/volume-mounts
+    group_add:
+      - ${DOCKER_GID}
+    user: "0:0"
+    environment:
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/cosydb
+      - COSY_ENGINE_DOCKER_SOCKET_PATH=unix:///var/run/docker.sock
+      - COSY_DOCKER_VOLUME_DIRECTORY=${VOLUME_DIRECTORY}
+      - COSY_DOCKER_BACKEND_VOLUME_MOUNT_PATH=/opt/cosy/volume-mounts
+      - COSY_LOKI_URL=http://loki-nginx-proxy:80
+      - COSY_LOKI_USER=${LOKI_USER}
+      - COSY_LOKI_PASSWORD=${LOKI_PASSWORD}
+      - COSY_INFLUX_URL=http://influx:8086
+      - COSY_INFLUX_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
+      - COSY_INFLUX_ORG=${COSY_INFLUXDB_ORG:-cosy-org}
+      - COSY_INFLUX_BUCKET=${COSY_INFLUXDB_BUCKET:-cosy-bucket}
+      - COSY_DEFAULTS_OWNER_USERNAME=${ADMIN_USERNAME}
+      - COSY_DEFAULTS_OWNER_PASSWORD=${ADMIN_PASSWORD}
+      - COSY_DEFAULTS_INITIALIZE_DUMMY_DATA=false
+      - COSY_FOOTER_FULL_NAME=${FOOTER_FULL_NAME}
+      - COSY_FOOTER_EMAIL=${FOOTER_EMAIL}
+      - COSY_FOOTER_PHONE=${FOOTER_PHONE}
+      - COSY_FOOTER_STREET=${FOOTER_STREET}
+      - COSY_FOOTER_CITY=${FOOTER_CITY}
+      - COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ALLOWED_ORIGINS}
+      - COSY_CUSTOM_METRICS_BASE_URL=http://host.docker.internal:${PORT}
+    depends_on:
+      database:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      loki-nginx-proxy:
+        condition: service_started
+      influx:
+        condition: service_started
+    networks:
+      - cosy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/magenta-mause/cosy-frontend:${FRONTEND_IMAGE_TAG}
+    depends_on:
+      - backend
+    networks:
+      - cosy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.25
+    container_name: cosy-nginx
+    ports:
+      - "0.0.0.0:${PORT}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - cosy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  database:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=cosydb
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - cosy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d cosydb || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: cosy-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - loki-data:/loki
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+    networks:
+      - cosy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  loki-nginx-proxy:
+    image: nginx:1.25
+    container_name: cosy-loki-nginx
+    volumes:
+      - ./loki-nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./htpasswd:/etc/nginx/htpasswd:ro
+    networks:
+      - cosy-network
+    depends_on:
+      - loki
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  influx:
+    image: influxdb:2.7-alpine
+    container_name: cosy-influx
+    volumes:
+      - influx_data:/var/lib/influxdb2
+      - influx_config:/etc/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${COSY_INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${COSY_INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${COSY_INFLUXDB_ORG:-cosy-org}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${COSY_INFLUXDB_BUCKET:-cosy-bucket}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${COSY_INFLUXDB_ADMIN_TOKEN}
+    networks:
+      - cosy-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+volumes:
+  influx_data:
+  influx_config:
+  postgres-data:
+  loki-data:
+
+networks:
+  cosy-network:
+

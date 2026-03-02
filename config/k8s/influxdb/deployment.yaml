@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosy-influxdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cosy-influxdb
+  template:
+    metadata:
+      labels:
+        app: cosy-influxdb
+    spec:
+      containers:
+        - name: cosy-influxdb
+          image: influxdb:2.7-alpine
+          ports:
+            - containerPort: 8086
+          env:
+            - name: DOCKER_INFLUXDB_INIT_MODE
+              value: setup
+            - name: DOCKER_INFLUXDB_INIT_BUCKET
+              value: "INFLUXDB_BUCKET_PLACEHOLDER"
+            - name: DOCKER_INFLUXDB_INIT_ORG
+              value: "INFLUXDB_ORG_PLACEHOLDER"
+            - name: DOCKER_INFLUXDB_INIT_USERNAME
+              value: "COSY_INFLUXDB_USERNAME_PLACEHOLDER"
+          envFrom:
+            - secretRef:
+                name: cosy-influxdb-secrets
+          volumeMounts:
+            - name: influxdb-data
+              mountPath: /var/lib/influxdb2
+            - name: influxdb-config
+              mountPath: /etc/influxdb2
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: influxdb-data
+          persistentVolumeClaim:
+            claimName: influxdb-data
+        - name: influxdb-config
+          persistentVolumeClaim:
+            claimName: influxdb-config

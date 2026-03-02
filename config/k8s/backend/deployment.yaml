@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosy-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cosy-backend
+  template:
+    metadata:
+      labels:
+        app: cosy-backend
+    spec:
+      containers:
+        - name: cosy-backend
+          image: ghcr.io/magenta-mause/cosy-backend:BACKEND_TAG_PLACEHOLDER
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-postgresql-credentials
+                  key: postgresql-username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-postgresql-credentials
+                  key: postgresql-password
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://cosy-postgres:5432/cosydb
+            - name: COSY_ENGINE_DOCKER_SOCKET_PATH
+              value: unix:///var/run/docker.sock
+            - name: COSY_DOCKER_VOLUME_DIRECTORY
+              value: /opt/cosy/volume-mounts
+            - name: COSY_DOCKER_BACKEND_VOLUME_MOUNT_PATH
+              value: /opt/cosy/volume-mounts
+            - name: COSY_LOKI_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-loki-credentials
+                  key: user
+            - name: COSY_LOKI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-loki-credentials
+                  key: password
+            - name: COSY_LOKI_URL
+              value: http://cosy-loki-nginx:80
+            - name: COSY_INFLUX_URL
+              value: http://cosy-influxdb:8086
+            - name: COSY_INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-influxdb-secrets
+                  key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+            - name: COSY_INFLUX_ORG
+              value: "INFLUXDB_ORG_PLACEHOLDER"
+            - name: COSY_INFLUX_BUCKET
+              value: "INFLUXDB_BUCKET_PLACEHOLDER"
+            - name: COSY_DEFAULTS_OWNER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-app-secrets
+                  key: admin-username
+            - name: COSY_DEFAULTS_OWNER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cosy-app-secrets
+                  key: admin-password
+            - name: COSY_DEFAULTS_INITIALIZE_DUMMY_DATA
+              value: false
+            - name: COSY_CORS_ALLOWED_ORIGINS
+              value: "COSY_CORS_ORIGIN_PLACEHOLDER"
+            - name: COSY_FOOTER_FULL_NAME
+              value: "FOOTER_FULL_NAME_PLACEHOLDER"
+            - name: COSY_FOOTER_EMAIL
+              value: "FOOTER_EMAIL_PLACEHOLDER"
+            - name: COSY_FOOTER_PHONE
+              value: "FOOTER_PHONE_PLACEHOLDER"
+            - name: COSY_FOOTER_STREET
+              value: "FOOTER_STREET_PLACEHOLDER"
+            - name: COSY_FOOTER_CITY
+              value: "FOOTER_CITY_PLACEHOLDER"
+            - name: RCON_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: COSY_CUSTOM_METRICS_BASE_URL
+              value: http://host.docker.internal:30080
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: volume-mounts
+              mountPath: /opt/cosy/volume-mounts
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /api/actuator/health
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/actuator/health
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 5
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: volume-mounts
+          hostPath:
+            path: /opt/cosy/volume-mounts
