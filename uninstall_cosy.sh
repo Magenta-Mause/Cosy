@@ -194,17 +194,26 @@ uninstall_docker() {
         warn "docker compose down encountered errors (some resources may already have been removed)."
     fi
 
-    # ── Remove any leftover containers by name ───────────────────────────────
-    info "Checking for leftover containers..."
-    local -a container_names=("cosy-backend" "cosy-nginx" "cosy-loki" "cosy-loki-nginx" "cosy-influx")
+    # ── Remove any gameserver containers with cosy- prefix ──────────────────────
+    info "Checking for gameserver containers..."
 
-    for name in "${container_names[@]}"; do
-        if docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
-            info "Removing leftover container: ${name}"
-            docker rm -f "${name}" 2>/dev/null || true
+    # Collect all containers with cosy- prefix
+    local -a containers=()
+    mapfile -t containers < <(docker ps -a --format '{{.Names}}' | grep "^cosy-" || true)
+
+    # Remove each container
+    for container_name in "${containers[@]}"; do
+        if [[ -n "$container_name" ]]; then
+            info "Removing gameserver container: ${container_name}"
+            docker rm -f "${container_name}" 2>/dev/null || true
         fi
     done
-    success "No leftover containers."
+
+    if [[ ${#containers[@]} -eq 0 ]]; then
+        success "No gameserver containers found."
+    else
+        success "Removed ${#containers[@]} gameserver container(s)."
+    fi
 
     # ── Remove systemd service ────────────────────────────────────────────────
     local service_file="/etc/systemd/system/cosy.service"
