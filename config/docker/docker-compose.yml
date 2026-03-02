@@ -9,6 +9,11 @@ services:
         condition: service_started
       influx:
         condition: service_started
+    environment:
+      - LOKI_USER=${LOKI_USER}
+      - LOKI_PASSWORD=${LOKI_PASSWORD}
+    volumes:
+      - ./htpasswd:/etc/nginx/htpasswd:ro
     entrypoint: /bin/sh
     command:
       - -c
@@ -18,6 +23,12 @@ services:
           sleep 1
         done
         echo "Loki is ready"
+        
+        echo "Waiting for Loki nginx proxy to be ready..."
+        while ! wget --spider -q --user="${LOKI_USER}" --password="${LOKI_PASSWORD}" http://loki-nginx-proxy:80 2>/dev/null; do
+          sleep 1
+        done
+        echo "Loki nginx proxy is ready"
         
         echo "Waiting for InfluxDB to be ready..."
         while ! wget --spider -q http://influx:8086/health 2>/dev/null; do
