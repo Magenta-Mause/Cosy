@@ -69,14 +69,14 @@ When deploying COSY, the installation script configures the application to run w
 *Install Cosy*:
 
 ```bash
-sudo bash -c "$(curl -fsSL h https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/install_cosy.sh)" _
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/install_cosy.sh)" _
 ```
 Note: the `_` can not be removed.
 
 *Uninstall Cosy*:
 
 ```bash
-sudo bash -c "$(curl -fsSL h https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh)" _ <your-installation-method>
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh)" _ <your-installation-method>
 ```
 Note: the `_` can not be removed.
 
