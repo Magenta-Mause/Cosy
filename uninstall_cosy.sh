@@ -170,10 +170,9 @@ uninstall_docker() {
     echo ""
 
     if [[ "${SKIP_CONFIRM}" != "true" ]]; then
-        read -rp "Are you sure you want to continue? [y/N]: " confirm
+        read -rp "Are you sure you want to continue? [Y/n]: " confirm
         case "${confirm}" in
-            [yY]|[yY][eE][sS]) ;;
-            *)
+            [nN]|[nN][oO]) 
                 info "Uninstallation cancelled."
                 exit 0
                 ;;
@@ -283,10 +282,9 @@ uninstall_kubernetes() {
     echo ""
 
     if [[ "${SKIP_CONFIRM}" != "true" ]]; then
-        read -rp "Are you sure you want to continue? [y/N]: " confirm
+        read -rp "Are you sure you want to continue? [Y/n]: " confirm
         case "${confirm}" in
-            [yY]|[yY][eE][sS]) ;;
-            *)
+            [nN]|[nN][oO]) 
                 info "Uninstallation cancelled."
                 exit 0
                 ;;
