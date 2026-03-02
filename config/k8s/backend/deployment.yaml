@@ -88,9 +88,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: COSY_CUSTOM_METRICS_BASE_URL
+              value: http://host.docker.internal:30080
           volumeMounts:
             - name: docker-socket
               mountPath: /var/run/docker.sock
+            - name: volume-mounts
+              mountPath: /etc/cosy/volume-mounts
           resources:
             limits:
               memory: "1Gi"
@@ -115,3 +119,6 @@ spec:
           hostPath:
             path: /var/run/docker.sock
             type: Socket
+        - name: volume-mounts
+          hostPath:
+            path: /etc/cosy/volume-mounts
