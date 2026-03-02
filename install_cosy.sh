@@ -80,7 +80,7 @@ usage_docker() {
     echo "  --footer-email    <email>     Footer contact email                 (default: empty)"
     echo "  --footer-phone    <phone>     Footer contact phone number          (default: empty)"
     echo "  --footer-street   <street>    Footer contact street address        (default: empty)"
-    echo "  --footer-city     <city>      Footer contact city                  (default: empty)"
+    echo "  --footer-city     <city>      Footer contact city & zip code       (default: empty)"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -98,7 +98,7 @@ usage_kubernetes() {
     echo "  --footer-email    <email>     Footer contact email                 (default: empty)"
     echo "  --footer-phone    <phone>     Footer contact phone number          (default: empty)"
     echo "  --footer-street   <street>    Footer contact street address        (default: empty)"
-    echo "  --footer-city     <city>      Footer contact city                  (default: empty)"
+    echo "  --footer-city     <city>      Footer contact city & zip code       (default: empty)"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -266,7 +266,7 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     fi
 
     if [[ -z "${FOOTER_CITY-}" ]]; then
-      read -rp "Footer city [default: empty]: " input_footer_city
+      read -rp "Footer city & zip code [default: empty]: " input_footer_city
       FOOTER_CITY="${input_footer_city:-}"
     fi
 fi
