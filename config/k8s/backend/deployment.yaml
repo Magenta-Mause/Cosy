@@ -72,6 +72,8 @@ spec:
                 secretKeyRef:
                   name: cosy-app-secrets
                   key: admin-password
+            - name: COSY_DEFAULTS_INITIALIZE_DUMMY_DATA
+              value: false
             - name: COSY_CORS_ALLOWED_ORIGINS
               value: "COSY_CORS_ORIGIN_PLACEHOLDER"
             - name: COSY_FOOTER_FULL_NAME
