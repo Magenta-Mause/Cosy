@@ -549,6 +549,61 @@ wait_for_docker_health() {
     fi
 }
 
+# ── Docker: Install systemd service ─────────────────────────────────────────
+install_systemd_service() {
+    if ! command -v systemctl &>/dev/null; then
+        warn "systemd is not available on this system. Skipping autostart setup."
+        warn "You will need to start COSY manually after each reboot."
+        return 0
+    fi
+
+    info "Installing systemd service for COSY autostart..."
+
+    local service_file="/etc/systemd/system/cosy.service"
+    local compose_file="${INSTALL_PATH}/config/docker-compose.yml"
+    local env_file="${INSTALL_PATH}/config/.env"
+
+    # Resolve the full binary path(s) for the ExecStart / ExecStop commands
+    local exec_start exec_stop
+    if [[ "$COMPOSE_CMD" == "docker compose" ]]; then
+        local docker_bin
+        docker_bin=$(command -v docker)
+        exec_start="${docker_bin} compose -f ${compose_file} --env-file ${env_file} up -d"
+        exec_stop="${docker_bin} compose -f ${compose_file} --env-file ${env_file} down"
+    else
+        local compose_bin
+        compose_bin=$(command -v docker-compose)
+        exec_start="${compose_bin} -f ${compose_file} --env-file ${env_file} up -d"
+        exec_stop="${compose_bin} -f ${compose_file} --env-file ${env_file} down"
+    fi
+
+    cat > "$service_file" <<EOF
+[Unit]
+Description=COSY Application (Docker Compose)
+Documentation=https://github.com/Magenta-Mause/Cosy
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${INSTALL_PATH}/config
+ExecStart=${exec_start}
+ExecStop=${exec_stop}
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chmod 644 "$service_file"
+    systemctl daemon-reload
+    systemctl enable cosy.service
+    success "systemd service installed and enabled at ${service_file}"
+    success "COSY will start automatically on the next server boot."
+}
+
 # ── Docker: Main deployment function ────────────────────────────────────────
 deploy_docker() {
     normalize_install_path
@@ -564,6 +619,7 @@ deploy_docker() {
     save_credentials_file
     start_docker_services
     wait_for_docker_health
+    install_systemd_service
 }
 
 
@@ -826,9 +882,11 @@ fi
 echo ""
 if [[ "$DEPLOY_METHOD" == "docker" ]]; then
     echo -e "  ${BOLD}Useful commands:${NC}"
-    echo -e "    Stop COSY:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} down"
+    echo -e "    Stop COSY:    sudo systemctl stop cosy"
+    echo -e "    Start COSY:   sudo systemctl start cosy"
+    echo -e "    Status:       sudo systemctl status cosy"
     echo -e "    View logs:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs -f"
-    echo -e "    Restart:      cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} restart"
+    echo -e "    Restart:      sudo systemctl restart cosy"
 else
     echo -e "  ${BOLD}Useful commands:${NC}"
     echo -e "    Get pods:     kubectl get pods -n ${K8S_NAMESPACE}"

@@ -206,6 +206,19 @@ uninstall_docker() {
     done
     success "No leftover containers."
 
+    # ── Remove systemd service ────────────────────────────────────────────────
+    local service_file="/etc/systemd/system/cosy.service"
+    if [[ -f "$service_file" ]]; then
+        info "Removing systemd service..."
+        systemctl stop cosy.service 2>/dev/null || true
+        systemctl disable cosy.service 2>/dev/null || true
+        rm -f "$service_file"
+        systemctl daemon-reload
+        success "systemd service removed."
+    else
+        info "No systemd service found, skipping."
+    fi
+
     # ── Delete installation directory ────────────────────────────────────────
     info "Deleting installation directory: ${COSY_DIR}"
 
