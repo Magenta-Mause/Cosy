@@ -31,7 +31,8 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="v0.1.0"
+# COSY_TAG="v0.1.0"
+COSY_TAG="refs/heads/feature/cosy-50-installation-script" # for testing latest installer changes
 FRONTEND_TAG="sha-1762097"
 BACKEND_TAG="sha-6c42655"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
