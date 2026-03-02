@@ -36,7 +36,7 @@ spec:
             - name: COSY_ENGINE_DOCKER_SOCKET_PATH
               value: unix:///var/run/docker.sock
             - name: COSY_DOCKER_VOLUME_DIRECTORY
-              value: /etc/cosy/volume-mounts
+              value: /opt/cosy/volume-mounts
             - name: COSY_DOCKER_BACKEND_VOLUME_MOUNT_PATH
               value: /opt/cosy/volume-mounts
             - name: COSY_LOKI_USER
@@ -96,7 +96,7 @@ spec:
             - name: docker-socket
               mountPath: /var/run/docker.sock
             - name: volume-mounts
-              mountPath: /etc/cosy/volume-mounts
+              mountPath: /opt/cosy/volume-mounts
           resources:
             limits:
               memory: "1Gi"
@@ -123,4 +123,4 @@ spec:
             type: Socket
         - name: volume-mounts
           hostPath:
-            path: /etc/cosy/volume-mounts
+            path: /opt/cosy/volume-mounts
