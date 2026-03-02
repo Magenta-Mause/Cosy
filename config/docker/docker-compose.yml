@@ -1,4 +1,35 @@
 services:
+  infrastructure-healthcheck:
+    image: alpine:latest
+    container_name: cosy-infrastructure-healthcheck
+    depends_on:
+      loki:
+        condition: service_started
+      loki-nginx-proxy:
+        condition: service_started
+      influx:
+        condition: service_started
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "Waiting for Loki to be ready..."
+        while ! wget --spider -q http://loki:3100/ready 2>/dev/null; do
+          sleep 1
+        done
+        echo "Loki is ready"
+        
+        echo "Waiting for InfluxDB to be ready..."
+        while ! wget --spider -q http://influx:8086/health 2>/dev/null; do
+          sleep 1
+        done
+        echo "InfluxDB is ready"
+        
+        echo "All infrastructure services are ready"
+    networks:
+      - cosy-network
+    restart: no
+
   backend:
     image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
     container_name: cosy-backend
@@ -35,12 +66,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
-      loki:
-        condition: service_started
-      loki-nginx-proxy:
-        condition: service_started
-      influx:
-        condition: service_started
+      infrastructure-healthcheck:
+        condition: service_completed_successfully
     networks:
       - cosy-network
     healthcheck:
@@ -76,8 +103,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
     networks:
       - cosy-network
     logging:
