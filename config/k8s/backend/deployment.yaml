@@ -37,6 +37,8 @@ spec:
               value: unix:///var/run/docker.sock
             - name: COSY_DOCKER_VOLUME_DIRECTORY
               value: /etc/cosy/volume-mounts
+            - name: COSY_DOCKER_BACKEND_VOLUME_MOUNT_PATH
+              value: /opt/cosy/volume-mounts
             - name: COSY_LOKI_USER
               valueFrom:
                 secretKeyRef:
