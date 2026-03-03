@@ -853,11 +853,13 @@ fi
 echo ""
 if [[ "$DEPLOY_METHOD" == "docker" ]]; then
     echo -e "  ${BOLD}Useful commands:${NC}"
-    echo -e "    Stop COSY:    sudo systemctl stop cosy"
-    echo -e "    Start COSY:   sudo systemctl start cosy"
-    echo -e "    Status:       sudo systemctl status cosy"
-    echo -e "    View logs:    sudo journalctl -u cosy"
-    echo -e "    Restart:      sudo systemctl restart cosy"
+    echo -e "    Stop COSY:         sudo systemctl stop cosy"
+    echo -e "    Start COSY:        sudo systemctl start cosy"
+    echo -e "    Status:            sudo systemctl status cosy"
+    echo -e "    View logs:         journalctl -u cosy"
+    echo -e "    View service logs: journalctl CONTAINER_NAME=cosy-backend -f"
+    echo -e "       -> to see the logs of other services look into the README."
+    echo -e "    Restart:           sudo systemctl restart cosy"
 else
     echo -e "  ${BOLD}Useful commands:${NC}"
     echo -e "    Get pods:     kubectl get pods -n ${K8S_NAMESPACE}"
