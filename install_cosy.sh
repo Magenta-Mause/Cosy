@@ -885,7 +885,7 @@ if [[ "$DEPLOY_METHOD" == "docker" ]]; then
     echo -e "    Stop COSY:    sudo systemctl stop cosy"
     echo -e "    Start COSY:   sudo systemctl start cosy"
     echo -e "    Status:       sudo systemctl status cosy"
-    echo -e "    View logs:    cd ${INSTALL_PATH}/config && ${COMPOSE_CMD} logs -f"
+    echo -e "    View logs:    sudo journalctl -u cosy"
     echo -e "    Restart:      sudo systemctl restart cosy"
 else
     echo -e "  ${BOLD}Useful commands:${NC}"
