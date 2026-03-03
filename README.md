@@ -256,3 +256,40 @@ Performs the following steps:
 # Shorthand alias, custom namespace, skip confirmation
 ./uninstall_cosy.sh k8s --namespace my-cosy-ns -y
 ```
+
+---
+
+### Reading Service Logs
+
+You can read logs from COSY services using `journalctl` with the container name filter:
+
+```bash
+journalctl CONTAINER_NAME=<container-name> -f
+```
+
+The `-f` flag follows the logs in real-time. Omit it to display historical logs.
+
+**Common container names:**
+- `cosy-backend`
+- `cosy-frontend`
+- `cosy-postgres`
+- `cosy-influxdb`
+- `cosy-loki`
+- `cosy-loki-nginx`
+- `cosy-infrastructure-healthcheck`
+- `cosy-nginx`
+
+**Examples:**
+
+```bash
+# View real-time backend logs
+journalctl CONTAINER_NAME=cosy-backend -f
+
+# View historical postgres logs (last 50 lines)
+journalctl CONTAINER_NAME=cosy-postgres -n 50
+
+# View logs from the last hour
+journalctl CONTAINER_NAME=cosy-frontend --since "1 hour ago"
+```
+
+For more information on `journalctl` options, run `man journalctl`.

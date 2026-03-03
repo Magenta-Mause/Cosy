@@ -29,6 +29,10 @@ services:
     networks:
       - cosy-network
     restart: no
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   backend:
     image: ghcr.io/magenta-mause/cosy-backend:${BACKEND_IMAGE_TAG}
@@ -76,23 +80,22 @@ services:
       timeout: 5s
       retries: 5
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
   frontend:
     image: ghcr.io/magenta-mause/cosy-frontend:${FRONTEND_IMAGE_TAG}
+    name: cosy-frontend
     depends_on:
       - backend
     networks:
       - cosy-network
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
   nginx:
@@ -110,14 +113,14 @@ services:
     networks:
       - cosy-network
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
   database:
     image: postgres:16
+    name: cosy-database
     environment:
       - POSTGRES_DB=cosydb
       - POSTGRES_USER=${POSTGRES_USER}
@@ -132,10 +135,9 @@ services:
       timeout: 5s
       retries: 12
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
   loki:
@@ -148,10 +150,9 @@ services:
     networks:
       - cosy-network
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
   loki-nginx-proxy:
@@ -165,10 +166,9 @@ services:
     depends_on:
       - loki
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
   influx:
@@ -187,10 +187,9 @@ services:
     networks:
       - cosy-network
     logging:
-      driver: "json-file"
+      driver: journald
       options:
-        max-size: "10m"
-        max-file: "5"
+        tag: "{{.Name}}"
     restart: unless-stopped
 
 volumes:
