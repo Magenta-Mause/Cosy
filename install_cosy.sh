@@ -287,10 +287,10 @@ FOOTER_CITY="${FOOTER_CITY:-}"
 
 # Build CORS origin and access URL
 if [[ "$PORT" == "80" ]]; then
-    COSY_CORS_ORIGIN="http://${DOMAIN}"
+    COSY_CORS_ORIGIN="http://${DOMAIN},https://${DOMAIN}"
     ACCESS_URL="http://${DOMAIN}"
 else
-    COSY_CORS_ORIGIN="http://${DOMAIN}:${PORT}"
+    COSY_CORS_ORIGIN="http://${DOMAIN}:${PORT},http://${DOMAIN},https://${DOMAIN}:${PORT},https://${DOMAIN}"
     ACCESS_URL="http://${DOMAIN}:${PORT}"
 fi
 
