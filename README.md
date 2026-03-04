@@ -76,7 +76,7 @@ Note: the `_` can not be removed.
 *Uninstall Cosy*:
 
 ```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh)" _ <your-installation-method>
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/refs/heads/main/uninstall_cosy.sh)" _
 ```
 Note: the `_` can not be removed.
 
