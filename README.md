@@ -110,7 +110,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 
   - `kubectl` configured with access to a Kubernetes cluster
   - An Ingress controller running in the cluster
-  - One of `htpasswd`, `openssl`, or `python3` (for credential generation)
+  - One of `htpasswd` or `openssl` (for credential generation)
   - each node in the cluster must have docker installed
 </details>
 
