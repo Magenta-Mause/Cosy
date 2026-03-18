@@ -310,6 +310,16 @@ generate_password() {
   printf '%s' "$pw"
 }
 
+generate_jwt_secret() {
+    if command -v openssl &>/dev/null; then
+        openssl rand -base64 32
+    elif command -v base64 &>/dev/null; then
+        head -c 32 /dev/urandom | base64
+    else
+        fatal "Cannot generate JWT secret.\n\n  Install one of: openssl or coreutils (base64)."
+    fi
+}
+
 generate_htpasswd() {
     local user="$1" pass="$2"
     if command -v htpasswd &>/dev/null; then
@@ -334,6 +344,7 @@ ADMIN_PASSWORD="$(generate_password)"
 COSY_INFLUXDB_USERNAME="cosy"
 COSY_INFLUXDB_PASSWORD="$(generate_password)"
 COSY_INFLUXDB_ADMIN_TOKEN="$(generate_password)"
+COSY_JWT_SECRET_KEY="$(generate_jwt_secret)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Normalize installation path (called during deployment)
@@ -467,6 +478,9 @@ COSY_INFLUXDB_PASSWORD=${COSY_INFLUXDB_PASSWORD}
 COSY_INFLUXDB_ADMIN_TOKEN=${COSY_INFLUXDB_ADMIN_TOKEN}
 COSY_INFLUXDB_ORG=${INFLUXDB_ORG}
 COSY_INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+
+# JWT secret
+COSY_JWT_SECRET_KEY=${COSY_JWT_SECRET_KEY}
 
 # Footer configuration
 FOOTER_FULL_NAME=${FOOTER_FULL_NAME}
@@ -699,6 +713,7 @@ create_k8s_secrets() {
         --namespace="$K8S_NAMESPACE" \
         --from-literal=admin-username="$ADMIN_USERNAME" \
         --from-literal=admin-password="$ADMIN_PASSWORD" \
+        --from-literal=jwt-secret-key="$COSY_JWT_SECRET_KEY" \
         --dry-run=client -o yaml | kubectl apply -f -
     success "Secret 'cosy-app-secrets' created."
 }
