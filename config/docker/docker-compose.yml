@@ -66,6 +66,7 @@ services:
       - COSY_FOOTER_STREET=${FOOTER_STREET}
       - COSY_FOOTER_CITY=${FOOTER_CITY}
       - COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ALLOWED_ORIGINS}
+      - COSY_JWT_SECRET_KEY=${COSY_JWT_SECRET_KEY}
       - COSY_CUSTOM_METRICS_BASE_URL=http://host.docker.internal:${PORT}
     depends_on:
       database:

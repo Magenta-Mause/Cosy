@@ -310,6 +310,16 @@ generate_password() {
   printf '%s' "$pw"
 }
 
+generate_jwt_secret() {
+    if command -v openssl &>/dev/null; then
+        openssl rand -base64 32
+    elif command -v base64 &>/dev/null; then
+        head -c 32 /dev/urandom | base64
+    else
+        fatal "Cannot generate JWT secret.\n\n  Install one of: openssl or coreutils (base64)."
+    fi
+}
+
 generate_htpasswd() {
     local user="$1" pass="$2"
     if command -v htpasswd &>/dev/null; then
@@ -334,7 +344,7 @@ ADMIN_PASSWORD="$(generate_password)"
 COSY_INFLUXDB_USERNAME="cosy"
 COSY_INFLUXDB_PASSWORD="$(generate_password)"
 COSY_INFLUXDB_ADMIN_TOKEN="$(generate_password)"
-COSY_JWT_SECRET_KEY="$(head -c 32 /dev/urandom | base64)"
+COSY_JWT_SECRET_KEY="$(generate_jwt_secret)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Normalize installation path (called during deployment)
