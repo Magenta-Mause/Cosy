@@ -714,6 +714,13 @@ create_k8s_secrets() {
         --from-literal=jwt-secret-key="$COSY_JWT_SECRET_KEY" \
         --dry-run=client -o yaml | kubectl apply -f -
     success "Secret 'cosy-app-secrets' created."
+
+    # Installation metadata (installed COSY version)
+    kubectl create secret generic cosy-install-metadata \
+        --namespace="$K8S_NAMESPACE" \
+        --from-literal=cosy-tag="$COSY_TAG" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    success "Secret 'cosy-install-metadata' created."
 }
 
 # ── K8s: PostgreSQL (StatefulSet + Service + PVC) ────────────────────────────
