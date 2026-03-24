@@ -22,8 +22,14 @@
   <a href="https://github.com/Magenta-Mause/Cosy-Templates">
     <img src="https://img.shields.io/badge/github-templates--repository-blue?logo=github">
   </a>
+  <a href="https://discord.gg/2uDybryKPe">
+    <img alt="Discord Server" src="https://img.shields.io/discord/1482365926304387196?logo=discord&label=%20discord&color=5865F2">
+  </a>
   <a href="https://cosy-docs.jannekeipert.de/">
     <img src="https://img.shields.io/badge/Home%20Page-F7951D" alt="Home Page" />
+  </a>
+  <a href="https://cosy-docs.jannekeipert.de/docs/">
+    <img src="https://img.shields.io/badge/Documentation-F7951D" alt="Documentation" />
   </a>
   <a href="https://github.com/Magenta-Mause/Cosy-Templates/tree/main/templates">
     <img src="https://img.shields.io/github/directory-file-count/Magenta-Mause/Cosy-Templates/templates?label=Supported%20Games" alt="Supported Games">
@@ -69,14 +75,14 @@ When deploying COSY, the installation script configures the application to run w
 *Install Cosy*:
 
 ```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/v1.0.0/install_cosy.sh)" _
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/v1.0.1/install_cosy.sh)" _
 ```
 Note: the `_` can not be removed.
 
 *Uninstall Cosy*:
 
 ```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/v1.0.0/uninstall_cosy.sh)" _
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Magenta-Mause/Cosy/v1.0.1/uninstall_cosy.sh)" _
 ```
 Note: the `_` can not be removed.
 
