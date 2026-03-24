@@ -29,7 +29,7 @@
     <img src="https://img.shields.io/badge/Home%20Page-F7951D" alt="Home Page" />
   </a>
   <a href="https://cosy-docs.jannekeipert.de/docs/">
-    <img src="https://img.shields.io/badge/Documentation-F7951D" alt="Home Page" />
+    <img src="https://img.shields.io/badge/Documentation-F7951D" alt="Documentation" />
   </a>
   <a href="https://github.com/Magenta-Mause/Cosy-Templates/tree/main/templates">
     <img src="https://img.shields.io/github/directory-file-count/Magenta-Mause/Cosy-Templates/templates?label=Supported%20Games" alt="Supported Games">
