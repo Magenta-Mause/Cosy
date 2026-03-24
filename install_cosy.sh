@@ -13,8 +13,6 @@ set -euo pipefail
 # Run './install_cosy.sh <command> --help' for command-specific options.
 # ─────────────────────────────────────────────────────────────────────────────
 
-readonly SCRIPT_VERSION="0.1.1"
-
 # ── Color & helpers ────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -51,7 +49,7 @@ COMPOSE_CMD="docker compose"
 
 # ── Parse CLI arguments ─────────────────────────────────────────────────────
 usage() {
-    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION}${NC}"
+    echo -e "${BOLD}COSY Installer v${COSY_TAG}${NC}"
     echo ""
     echo "Usage: $0 <command> [OPTIONS]"
     echo ""
@@ -67,7 +65,7 @@ usage() {
 }
 
 usage_docker() {
-    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION} - Docker deployment${NC}"
+    echo -e "${BOLD}COSY Installer v${COSY_TAG} - Docker deployment${NC}"
     echo ""
     echo "Usage: $0 docker [OPTIONS]"
     echo ""
@@ -87,7 +85,7 @@ usage_docker() {
 }
 
 usage_kubernetes() {
-    echo -e "${BOLD}COSY Installer v${SCRIPT_VERSION} - Kubernetes deployment${NC}"
+    echo -e "${BOLD}COSY Installer v${COSY_TAG} - Kubernetes deployment${NC}"
     echo ""
     echo "Usage: $0 kubernetes [OPTIONS]"
     echo ""
@@ -198,7 +196,7 @@ echo "                                                                          
 if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     echo -e "${BOLD}${CYAN}"
     echo "  ╔═══════════════════════════════════════╗"
-    echo "  ║        COSY Installer v${SCRIPT_VERSION}          ║"
+    echo "  ║        COSY Installer v${COSY_TAG}          ║"
     echo "  ╚═══════════════════════════════════════╝"
     echo -e "${NC}"
 
@@ -446,7 +444,7 @@ write_docker_env_file() {
     volume_dir="${INSTALL_PATH}/volumes"
 
     cat > "$env_file" <<EOF
-# COSY Installer v${SCRIPT_VERSION}
+# COSY Installer v${COSY_TAG}
 # Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Deployment configuration
