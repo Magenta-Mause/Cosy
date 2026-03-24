@@ -448,6 +448,7 @@ write_docker_env_file() {
 # Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Deployment configuration
+COSY_TAG=${COSY_TAG}
 HOST_UID=${host_uid}
 DOCKER_GID=${docker_gid}
 
