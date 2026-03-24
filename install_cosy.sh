@@ -13,7 +13,7 @@ set -euo pipefail
 # Run './install_cosy.sh <command> --help' for command-specific options.
 # ─────────────────────────────────────────────────────────────────────────────
 
-readonly SCRIPT_VERSION="0.1.0"
+readonly SCRIPT_VERSION="0.1.1"
 
 # ── Color & helpers ────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -31,7 +31,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="v1.0.0"
+COSY_TAG="v1.0.1"
 FRONTEND_TAG="sha-edd9425"
 BACKEND_TAG="sha-c68e624"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
