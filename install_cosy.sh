@@ -72,6 +72,7 @@ usage_docker() {
     echo "Options:"
     echo "  --path     /path/to/install   Base directory (cosy/ created inside)  (default: /opt)"
     echo "  --port     <port>             Port for the reverse proxy / CORS     (default: 80)"
+    echo "  --tls                         Enable TLS/HTTPS via Let's Encrypt   (cannot combine with --port)"
     echo "  --username <name>             Admin account username               (default: admin)"
     echo "  --domain   <domain>           Domain for CORS configuration        (default: ${DOMAIN_DEFAULT})"
     echo "  --footer-fullname <name>      Footer contact full name             (default: empty)"
@@ -90,6 +91,7 @@ usage_kubernetes() {
     echo "Usage: $0 kubernetes [OPTIONS]"
     echo ""
     echo "Options:"
+    echo "  --tls                         Enable TLS/HTTPS via Let's Encrypt"
     echo "  --username <name>             Admin account username               (default: admin)"
     echo "  --domain   <domain>           Domain for CORS / ingress host       (default: ${DOMAIN_DEFAULT})"
     echo "  --footer-fullname <name>      Footer contact full name             (default: empty)"
@@ -134,8 +136,10 @@ while [[ $# -gt 0 ]]; do
             INSTALL_PATH="$2"; shift 2 ;;
         --port)
             [[ "$DEPLOY_METHOD" != "docker" ]] && fatal "--port is only supported for the 'docker' command.\nRun '$0 ${DEPLOY_METHOD} --help' for usage information."
-            PORT="$2"; shift 2 ;;
+            PORT="$2"; PORT_EXPLICITLY_SET=true; shift 2 ;;
         # ── Shared flags ─────────────────────────────────────────────────────
+        --tls)
+            ENABLE_TLS=true; shift ;;
         --username)
             ADMIN_USERNAME="$2"; shift 2 ;;
         --domain)
@@ -158,6 +162,11 @@ while [[ $# -gt 0 ]]; do
             fatal "Unknown option: $1\nRun '$0 ${DEPLOY_METHOD} --help' for usage information." ;;
     esac
 done
+
+# ── Validate mutually exclusive flags ───────────────────────────────────────
+if [[ "${ENABLE_TLS-}" == "true" && "${PORT_EXPLICITLY_SET-}" == "true" ]]; then
+    fatal "--tls and --port cannot be used together.\n\n  TLS mode uses standard ports 80 and 443.\n  Remove --port to use TLS, or remove --tls to use a custom port."
+fi
 
 echo "                                                                                        @@                                                                "
 echo "                                                                                        @%@                                                               "
@@ -236,6 +245,18 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       validate_port "$PORT"
     fi
 
+    # ── TLS ──────────────────────────────────────────────────────────────────
+    if [[ -z "${ENABLE_TLS-}" ]]; then
+      read -rp "Enable TLS/HTTPS via Let's Encrypt? [y/N]: " input_tls
+      case "${input_tls}" in
+        [yY]|[yY][eE][sS]) ENABLE_TLS=true ;;
+        *) ENABLE_TLS=false ;;
+      esac
+      if [[ "$ENABLE_TLS" == "true" && "${PORT_EXPLICITLY_SET-}" == "true" ]]; then
+        fatal "TLS and a custom port cannot be used together.\n  TLS requires standard ports 80 and 443."
+      fi
+    fi
+
     # ── Domain ───────────────────────────────────────────────────────────────
     if [[ -z "${DOMAIN-}" ]]; then
       read -rp "Domain [default: ${DOMAIN_DEFAULT}]: " input_domain
@@ -271,6 +292,7 @@ fi
 
 # ── Apply defaults ───────────────────────────────────────────────────────────
 DEPLOY_METHOD="${DEPLOY_METHOD:-docker}"
+ENABLE_TLS="${ENABLE_TLS:-false}"
 PORT="${PORT:-$PORT_DEFAULT}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-$ADMIN_USERNAME_DEFAULT}"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
@@ -284,7 +306,10 @@ FOOTER_CITY="${FOOTER_CITY:-}"
 [[ "$DEPLOY_METHOD" == "docker" ]] && validate_port "$PORT"
 
 # Build CORS origin and access URL
-if [[ "$PORT" == "80" ]]; then
+if [[ "$ENABLE_TLS" == "true" ]]; then
+    COSY_CORS_ORIGIN="https://${DOMAIN},http://${DOMAIN}"
+    ACCESS_URL="https://${DOMAIN}"
+elif [[ "$PORT" == "80" ]]; then
     COSY_CORS_ORIGIN="http://${DOMAIN},https://${DOMAIN}"
     ACCESS_URL="http://${DOMAIN}"
 else
@@ -398,11 +423,21 @@ check_docker_prerequisites() {
         fatal "Docker Compose is not installed.\n\n  Make sure either the \`docker compose\` or \`docker-compose\` command is available."
     fi
 
-    if ss -tlnp 2>/dev/null | grep -q ":${PORT} " || \
-       netstat -tlnp 2>/dev/null | grep -q ":${PORT} "; then
-        fatal "Port ${PORT} (nginx) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        for check_port in 80 443; do
+            if ss -tlnp 2>/dev/null | grep -q ":${check_port} " || \
+               netstat -tlnp 2>/dev/null | grep -q ":${check_port} "; then
+                fatal "Port ${check_port} is already in use.\n\n  TLS mode requires both ports 80 and 443 to be available."
+            fi
+            success "Port ${check_port} is available."
+        done
+    else
+        if ss -tlnp 2>/dev/null | grep -q ":${PORT} " || \
+           netstat -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+            fatal "Port ${PORT} (nginx) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
+        fi
+        success "Port ${PORT} is available."
     fi
-    success "Port ${PORT} is available."
 }
 
 # ── Docker: Write htpasswd file ─────────────────────────────────────────────
@@ -424,7 +459,25 @@ download_docker_configs() {
     local config_dir="${INSTALL_PATH}/config"
     mkdir -p "$config_dir"
 
-    local -a files=("docker-compose.yml" "loki-config.yaml" "loki-nginx.conf" "nginx.conf")
+    # Always download shared config files
+    local -a files=("loki-config.yaml" "loki-nginx.conf")
+
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        # Download Caddy-based compose file (saved as docker-compose.yml)
+        curl -L -o "${config_dir}/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/config/docker/docker-compose-tls.yml" 2>/dev/null \
+            || fatal "Failed to download docker-compose-tls.yml\n\n  Check your internet connection and try again."
+        success "docker-compose.yml (TLS) downloaded."
+
+        # Download and configure Caddyfile
+        curl -L -o "${config_dir}/Caddyfile" "${CONFIG_FILES_URL_PREFIX}/config/docker/Caddyfile" 2>/dev/null \
+            || fatal "Failed to download Caddyfile\n\n  Check your internet connection and try again."
+        sed -i "s|DOMAIN_PLACEHOLDER|${DOMAIN}|g" "${config_dir}/Caddyfile"
+        success "Caddyfile downloaded and configured."
+    else
+        # Download nginx-based compose and config
+        files+=("docker-compose.yml" "nginx.conf")
+    fi
+
     for f in "${files[@]}"; do
         curl -L -o "${config_dir}/${f}" "${CONFIG_FILES_URL_PREFIX}/config/docker/${f}" 2>/dev/null \
             || fatal "Failed to download ${f} from ${CONFIG_FILES_URL_PREFIX}/config/docker/${f}\n\n  Check your internet connection and try again."
@@ -460,6 +513,7 @@ FRONTEND_IMAGE_TAG=${FRONTEND_TAG}
 ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 PORT=${PORT}
+DOMAIN=${DOMAIN}
 COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ORIGIN}
 VOLUME_DIRECTORY=${volume_dir}
 
@@ -516,9 +570,21 @@ wait_for_docker_health() {
     info "Waiting for services to become ready..."
     local max_retries=60 interval=3 retries=0
 
+    # When TLS is enabled, Caddy listens on port 80 (redirects to 443).
+    # Use -Lk to follow redirects and accept self-signed certs during provisioning.
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        local health_url="http://127.0.0.1/api/actuator/health"
+        local fallback_url="http://127.0.0.1"
+        local curl_opts="-sfLk"
+    else
+        local health_url="http://127.0.0.1:${PORT}/api/actuator/health"
+        local fallback_url="http://127.0.0.1:${PORT}"
+        local curl_opts="-sf"
+    fi
+
     while [[ $retries -lt $max_retries ]]; do
-        if curl -sf "http://127.0.0.1:${PORT}/api/actuator/health" &>/dev/null || \
-           curl -sf "http://127.0.0.1:${PORT}" &>/dev/null; then
+        if curl $curl_opts "$health_url" &>/dev/null || \
+           curl $curl_opts "$fallback_url" &>/dev/null; then
             break
         fi
         retries=$((retries + 1))
@@ -620,6 +686,11 @@ download_k8s_manifests() {
     info "Downloading K8s manifests..."
     
     # Define all manifest files to download
+    local ingress_files="frontend.yaml backend.yaml"
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        ingress_files="frontend-tls.yaml backend-tls.yaml"
+    fi
+
     local -A manifest_files=(
         [postgres]="pvc.yaml service.yaml statefulset.yaml"
         [loki]="configmap.yaml pvc.yaml deployment.yaml service.yaml"
@@ -627,9 +698,9 @@ download_k8s_manifests() {
         [influxdb]="pvc-data.yaml pvc-config.yaml deployment.yaml service.yaml"
         [backend]="deployment.yaml service.yaml"
         [frontend]="deployment.yaml service.yaml"
-        [ingress]="frontend.yaml backend.yaml"
+        [ingress]="$ingress_files"
     )
-    
+
     for subdir in "${!manifest_files[@]}"; do
         mkdir -p "${K8S_TEMP_DIR}/${subdir}"
         for file in ${manifest_files[$subdir]}; do
@@ -638,6 +709,19 @@ download_k8s_manifests() {
             success "  ${subdir}/${file} downloaded."
         done
     done
+
+    # Rename TLS ingress files so the rest of the script works unchanged
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        mv "${K8S_TEMP_DIR}/ingress/frontend-tls.yaml" "${K8S_TEMP_DIR}/ingress/frontend.yaml"
+        mv "${K8S_TEMP_DIR}/ingress/backend-tls.yaml" "${K8S_TEMP_DIR}/ingress/backend.yaml"
+
+        # Download cert-manager ClusterIssuer
+        mkdir -p "${K8S_TEMP_DIR}/cert-manager"
+        curl -L -o "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml" "${CONFIG_FILES_URL_PREFIX}/config/k8s/cert-manager/cluster-issuer.yaml" 2>/dev/null \
+            || fatal "Failed to download cert-manager/cluster-issuer.yaml\n\n  Check your internet connection and try again."
+        success "  cert-manager/cluster-issuer.yaml downloaded."
+    fi
+
     success "All K8s manifests downloaded."
 }
 
@@ -660,7 +744,34 @@ check_k8s_prerequisites() {
     if ! kubectl get nodes &>/dev/null; then
       fatal "Cannot connect to a Kubernetes cluster.\n\n  Make sure your kubeconfig is set up correctly:\n    kubectl cluster-info"
     fi
-      success "Kubernetes cluster is reachable."
+    success "Kubernetes cluster is reachable."
+
+    # ── cert-manager check (TLS only) ──────────────────────────────────────
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        if kubectl get crd certificates.cert-manager.io &>/dev/null; then
+            success "cert-manager is installed."
+        else
+            warn "cert-manager is not installed in this cluster."
+            warn "cert-manager is required for automatic TLS certificate provisioning."
+            echo ""
+            if [[ -t 0 && "${USE_DEFAULTS-}" != "true" ]]; then
+                read -rp "Install cert-manager now? [Y/n]: " install_cm
+                case "${install_cm}" in
+                    [nN]|[nN][oO])
+                        fatal "Cannot enable TLS without cert-manager.\n  Install it manually: https://cert-manager.io/docs/installation/" ;;
+                esac
+                info "Installing cert-manager..."
+                kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+                info "Waiting for cert-manager to be ready..."
+                kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
+                kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=120s
+                kubectl wait --for=condition=Available deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+                success "cert-manager installed successfully."
+            else
+                fatal "cert-manager is not installed and cannot prompt for installation in non-interactive mode.\n  Install it manually first: https://cert-manager.io/docs/installation/"
+            fi
+        fi
+    fi
 }
 
 # ── K8s: Create namespace ───────────────────────────────────────────────────
@@ -815,6 +926,16 @@ wait_for_k8s_ready() {
     success "All Kubernetes resources deployed."
 }
 
+# ── K8s: cert-manager ClusterIssuer (TLS only) ─────────────────────────────
+apply_k8s_cert_manager() {
+    if [[ "$ENABLE_TLS" != "true" ]]; then
+        return 0
+    fi
+    info "Applying cert-manager ClusterIssuer..."
+    kubectl apply -f "${K8S_TEMP_DIR}/cert-manager/"
+    success "ClusterIssuer 'cosy-letsencrypt' created."
+}
+
 # ── K8s: Main deployment function ────────────────────────────────────────────
 deploy_kubernetes() {
     check_k8s_prerequisites
@@ -830,6 +951,7 @@ deploy_kubernetes() {
     apply_k8s_influxdb
     apply_k8s_backend
     apply_k8s_frontend
+    apply_k8s_cert_manager
     apply_k8s_ingresses
     wait_for_k8s_ready
 }

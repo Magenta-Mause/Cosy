@@ -316,6 +316,13 @@ uninstall_kubernetes() {
     else
         fatal "Failed to delete namespace '${K8S_NAMESPACE}'.\n\n  Try manually:\n    kubectl delete namespace ${K8S_NAMESPACE}"
     fi
+
+    # Clean up cluster-scoped ClusterIssuer if it was created by COSY
+    if kubectl get clusterissuer cosy-letsencrypt &>/dev/null 2>&1; then
+        info "Removing ClusterIssuer 'cosy-letsencrypt'..."
+        kubectl delete clusterissuer cosy-letsencrypt || true
+        success "ClusterIssuer removed."
+    fi
 }
 
 
