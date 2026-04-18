@@ -113,6 +113,12 @@ validate_port() {
     fi
 }
 
+# Escape a value so it can be safely used as the replacement in sed 's|...|...|'
+# (handles the delimiter `|`, the escape `\`, and the backreference `&`).
+sed_escape_replacement() {
+    printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'
+}
+
 # ── Parse subcommand (optional – prompted interactively if omitted) ────────────
 case "${1-}" in
     docker)
@@ -494,8 +500,11 @@ download_docker_configs() {
         # Download and configure Caddyfile
         curl -fL -o "${config_dir}/Caddyfile" "${CONFIG_FILES_URL_PREFIX}/config/docker/Caddyfile" 2>/dev/null \
             || fatal "Failed to download Caddyfile\n\n  Check your internet connection and try again."
-        sed -i "s|DOMAIN_PLACEHOLDER|${DOMAIN}|g" "${config_dir}/Caddyfile"
-        sed -i "s|EMAIL_PLACEHOLDER|${TLS_EMAIL}|g" "${config_dir}/Caddyfile"
+        local domain_esc tls_email_esc
+        domain_esc=$(sed_escape_replacement "$DOMAIN")
+        tls_email_esc=$(sed_escape_replacement "$TLS_EMAIL")
+        sed -i "s|DOMAIN_PLACEHOLDER|${domain_esc}|g" "${config_dir}/Caddyfile"
+        sed -i "s|EMAIL_PLACEHOLDER|${tls_email_esc}|g" "${config_dir}/Caddyfile"
         success "Caddyfile downloaded and configured."
     else
         # Download nginx-based compose and config
@@ -594,15 +603,17 @@ wait_for_docker_health() {
     info "Waiting for services to become ready..."
     local max_retries=60 interval=3 retries=0
 
-    # When TLS is enabled, Caddy matches requests by domain name.
-    # Use the Host header so Caddy routes correctly, and -Lk to follow
-    # redirects and accept not-yet-trusted certs during provisioning.
+    # When TLS is enabled, probe the HTTPS endpoint directly using the
+    # configured domain name so Caddy can route via SNI/host matching, but
+    # pin that domain to localhost so readiness does not depend on external
+    # DNS or routing. Keep -k to tolerate not-yet-trusted certs during
+    # provisioning.
     local health_url fallback_url
     local -a curl_opts
     if [[ "$ENABLE_TLS" == "true" ]]; then
-        health_url="http://127.0.0.1/api/actuator/health"
-        fallback_url="http://127.0.0.1"
-        curl_opts=(-sfLk -H "Host:${DOMAIN}")
+        health_url="https://${DOMAIN}/api/actuator/health"
+        fallback_url="https://${DOMAIN}"
+        curl_opts=(-sfk --resolve "${DOMAIN}:443:127.0.0.1")
     else
         health_url="http://127.0.0.1:${PORT}/api/actuator/health"
         fallback_url="http://127.0.0.1:${PORT}"
@@ -927,8 +938,9 @@ apply_k8s_frontend() {
 apply_k8s_ingresses() {
     info "Creating ingresses for domain '${DOMAIN}'..."
     local manifest_dir="${K8S_TEMP_DIR}/ingress"
-    # Replace domain placeholder with actual domain in all files
-    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|DOMAIN_PLACEHOLDER|${DOMAIN}|g" {} \;
+    local domain_esc
+    domain_esc=$(sed_escape_replacement "$DOMAIN")
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|DOMAIN_PLACEHOLDER|${domain_esc}|g" {} \;
     kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
     info "Ingresses created for '${DOMAIN}'."
 }
@@ -959,7 +971,9 @@ apply_k8s_cert_manager() {
         return 0
     fi
     info "Applying cert-manager ClusterIssuer..."
-    sed -i "s|EMAIL_PLACEHOLDER|${TLS_EMAIL}|g" "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml"
+    local tls_email_esc
+    tls_email_esc=$(sed_escape_replacement "$TLS_EMAIL")
+    sed -i "s|EMAIL_PLACEHOLDER|${tls_email_esc}|g" "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml"
     kubectl apply -f "${K8S_TEMP_DIR}/cert-manager/"
     success "ClusterIssuer 'cosy-letsencrypt' created."
 }
