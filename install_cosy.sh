@@ -256,7 +256,7 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
         [yY]|[yY][eE][sS]) ENABLE_TLS=true ;;
         *) ENABLE_TLS=false ;;
       esac
-      if [[ "$ENABLE_TLS" == "true" && -n "${PORT-}" && "$PORT" != "$PORT_DEFAULT" ]]; then
+      if [[ "$ENABLE_TLS" == "true" && ( "${PORT_EXPLICITLY_SET-}" == "true" || ( -n "${PORT-}" && "$PORT" != "$PORT_DEFAULT" ) ) ]]; then
         fatal "TLS and a custom port cannot be used together.\n  TLS requires standard ports 80 and 443."
       fi
     fi
@@ -439,21 +439,24 @@ check_docker_prerequisites() {
         fatal "Docker Compose is not installed.\n\n  Make sure either the \`docker compose\` or \`docker-compose\` command is available."
     fi
 
-    if ! command -v ss &>/dev/null && ! command -v netstat &>/dev/null; then
+    local port_check_cmd
+    if command -v ss &>/dev/null; then
+        port_check_cmd="ss -tlnp"
+    elif command -v netstat &>/dev/null; then
+        port_check_cmd="netstat -tlnp"
+    else
         fatal "Neither 'ss' nor 'netstat' is installed, but one is required to check port availability.\n  Install iproute2 (provides 'ss') or net-tools (provides 'netstat')."
     fi
 
     if [[ "$ENABLE_TLS" == "true" ]]; then
         for check_port in 80 443; do
-            if ss -tlnp 2>/dev/null | grep -q ":${check_port} " || \
-               netstat -tlnp 2>/dev/null | grep -q ":${check_port} "; then
+            if $port_check_cmd 2>/dev/null | grep -q ":${check_port} "; then
                 fatal "Port ${check_port} is already in use.\n\n  TLS mode requires both ports 80 and 443 to be available."
             fi
             success "Port ${check_port} is available."
         done
     else
-        if ss -tlnp 2>/dev/null | grep -q ":${PORT} " || \
-           netstat -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+        if $port_check_cmd 2>/dev/null | grep -q ":${PORT} "; then
             fatal "Port ${PORT} (nginx) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
         fi
         success "Port ${PORT} is available."
@@ -500,7 +503,7 @@ download_docker_configs() {
     fi
 
     for f in "${files[@]}"; do
-        curl -L -o "${config_dir}/${f}" "${CONFIG_FILES_URL_PREFIX}/config/docker/${f}" 2>/dev/null \
+        curl -fL -o "${config_dir}/${f}" "${CONFIG_FILES_URL_PREFIX}/config/docker/${f}" 2>/dev/null \
             || fatal "Failed to download ${f} from ${CONFIG_FILES_URL_PREFIX}/config/docker/${f}\n\n  Check your internet connection and try again."
         success "${f} downloaded."
     done
@@ -728,7 +731,7 @@ download_k8s_manifests() {
     for subdir in "${!manifest_files[@]}"; do
         mkdir -p "${K8S_TEMP_DIR}/${subdir}"
         for file in ${manifest_files[$subdir]}; do
-            curl -L -o "${K8S_TEMP_DIR}/${subdir}/${file}" "${CONFIG_FILES_URL_PREFIX}/config/k8s/${subdir}/${file}" 2>/dev/null \
+            curl -fL -o "${K8S_TEMP_DIR}/${subdir}/${file}" "${CONFIG_FILES_URL_PREFIX}/config/k8s/${subdir}/${file}" 2>/dev/null \
                 || fatal "Failed to download ${subdir}/${file}\n\n  Check your internet connection and try again."
             success "  ${subdir}/${file} downloaded."
         done
