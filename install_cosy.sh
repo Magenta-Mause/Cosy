@@ -798,8 +798,9 @@ check_k8s_prerequisites() {
                     [nN]|[nN][oO])
                         fatal "Cannot enable TLS without cert-manager.\n  Install it manually: https://cert-manager.io/docs/installation/" ;;
                 esac
-                info "Installing cert-manager v1.17.1..."
-                kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
+                local cert_manager_version="v1.17.1"
+                info "Installing cert-manager ${cert_manager_version}..."
+                kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${cert_manager_version}/cert-manager.yaml"
                 info "Waiting for cert-manager to be ready..."
                 kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
                 kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=120s
