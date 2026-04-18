@@ -1,3 +1,7 @@
+{
+    email EMAIL_PLACEHOLDER
+}
+
 DOMAIN_PLACEHOLDER {
     handle /api/* {
         reverse_proxy backend:8080

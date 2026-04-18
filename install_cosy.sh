@@ -73,6 +73,7 @@ usage_docker() {
     echo "  --path     /path/to/install   Base directory (cosy/ created inside)  (default: /opt)"
     echo "  --port     <port>             Port for the reverse proxy / CORS     (default: 80)"
     echo "  --tls                         Enable TLS/HTTPS via Let's Encrypt   (cannot combine with --port)"
+    echo "  --tls-email <email>           Email for Let's Encrypt notifications (required with --tls)"
     echo "  --username <name>             Admin account username               (default: admin)"
     echo "  --domain   <domain>           Domain for CORS configuration        (default: ${DOMAIN_DEFAULT})"
     echo "  --footer-fullname <name>      Footer contact full name             (default: empty)"
@@ -92,6 +93,7 @@ usage_kubernetes() {
     echo ""
     echo "Options:"
     echo "  --tls                         Enable TLS/HTTPS via Let's Encrypt"
+    echo "  --tls-email <email>           Email for Let's Encrypt notifications (required with --tls)"
     echo "  --username <name>             Admin account username               (default: admin)"
     echo "  --domain   <domain>           Domain for CORS / ingress host       (default: ${DOMAIN_DEFAULT})"
     echo "  --footer-fullname <name>      Footer contact full name             (default: empty)"
@@ -140,6 +142,8 @@ while [[ $# -gt 0 ]]; do
         # ── Shared flags ─────────────────────────────────────────────────────
         --tls)
             ENABLE_TLS=true; shift ;;
+        --tls-email)
+            TLS_EMAIL="$2"; shift 2 ;;
         --username)
             ADMIN_USERNAME="$2"; shift 2 ;;
         --domain)
@@ -252,9 +256,16 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
         [yY]|[yY][eE][sS]) ENABLE_TLS=true ;;
         *) ENABLE_TLS=false ;;
       esac
-      if [[ "$ENABLE_TLS" == "true" && "${PORT_EXPLICITLY_SET-}" == "true" ]]; then
+      if [[ "$ENABLE_TLS" == "true" && -n "${PORT-}" && "$PORT" != "$PORT_DEFAULT" ]]; then
         fatal "TLS and a custom port cannot be used together.\n  TLS requires standard ports 80 and 443."
       fi
+    fi
+
+    # ── TLS email (for Let's Encrypt) ────────────────────────────────────────
+    if [[ "${ENABLE_TLS-}" == "true" && -z "${TLS_EMAIL-}" ]]; then
+      read -rp "Email for Let's Encrypt notifications: " input_tls_email
+      [[ -z "$input_tls_email" ]] && fatal "An email address is required for Let's Encrypt certificate provisioning."
+      TLS_EMAIL="$input_tls_email"
     fi
 
     # ── Domain ───────────────────────────────────────────────────────────────
@@ -288,6 +299,11 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       read -rp "Footer city & zip code [default: empty]: " input_footer_city
       FOOTER_CITY="${input_footer_city:-}"
     fi
+fi
+
+# ── Validate TLS email is set when TLS is enabled ────────────────────────────
+if [[ "${ENABLE_TLS-}" == "true" && -z "${TLS_EMAIL-}" ]]; then
+    fatal "TLS mode requires an email for Let's Encrypt notifications.\n  Pass it with: --tls-email <email>"
 fi
 
 # ── Apply defaults ───────────────────────────────────────────────────────────
@@ -464,14 +480,15 @@ download_docker_configs() {
 
     if [[ "$ENABLE_TLS" == "true" ]]; then
         # Download Caddy-based compose file (saved as docker-compose.yml)
-        curl -L -o "${config_dir}/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/config/docker/docker-compose-tls.yml" 2>/dev/null \
+        curl -fL -o "${config_dir}/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/config/docker/docker-compose-tls.yml" 2>/dev/null \
             || fatal "Failed to download docker-compose-tls.yml\n\n  Check your internet connection and try again."
         success "docker-compose.yml (TLS) downloaded."
 
         # Download and configure Caddyfile
-        curl -L -o "${config_dir}/Caddyfile" "${CONFIG_FILES_URL_PREFIX}/config/docker/Caddyfile" 2>/dev/null \
+        curl -fL -o "${config_dir}/Caddyfile" "${CONFIG_FILES_URL_PREFIX}/config/docker/Caddyfile" 2>/dev/null \
             || fatal "Failed to download Caddyfile\n\n  Check your internet connection and try again."
         sed -i "s|DOMAIN_PLACEHOLDER|${DOMAIN}|g" "${config_dir}/Caddyfile"
+        sed -i "s|EMAIL_PLACEHOLDER|${TLS_EMAIL}|g" "${config_dir}/Caddyfile"
         success "Caddyfile downloaded and configured."
     else
         # Download nginx-based compose and config
@@ -570,12 +587,13 @@ wait_for_docker_health() {
     info "Waiting for services to become ready..."
     local max_retries=60 interval=3 retries=0
 
-    # When TLS is enabled, Caddy listens on port 80 (redirects to 443).
-    # Use -Lk to follow redirects and accept self-signed certs during provisioning.
+    # When TLS is enabled, Caddy matches requests by domain name.
+    # Use the Host header so Caddy routes correctly, and -Lk to follow
+    # redirects and accept not-yet-trusted certs during provisioning.
     if [[ "$ENABLE_TLS" == "true" ]]; then
         local health_url="http://127.0.0.1/api/actuator/health"
         local fallback_url="http://127.0.0.1"
-        local curl_opts="-sfLk"
+        local curl_opts="-sfLk -H Host:${DOMAIN}"
     else
         local health_url="http://127.0.0.1:${PORT}/api/actuator/health"
         local fallback_url="http://127.0.0.1:${PORT}"
@@ -717,7 +735,7 @@ download_k8s_manifests() {
 
         # Download cert-manager ClusterIssuer
         mkdir -p "${K8S_TEMP_DIR}/cert-manager"
-        curl -L -o "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml" "${CONFIG_FILES_URL_PREFIX}/config/k8s/cert-manager/cluster-issuer.yaml" 2>/dev/null \
+        curl -fL -o "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml" "${CONFIG_FILES_URL_PREFIX}/config/k8s/cert-manager/cluster-issuer.yaml" 2>/dev/null \
             || fatal "Failed to download cert-manager/cluster-issuer.yaml\n\n  Check your internet connection and try again."
         success "  cert-manager/cluster-issuer.yaml downloaded."
     fi
@@ -760,8 +778,8 @@ check_k8s_prerequisites() {
                     [nN]|[nN][oO])
                         fatal "Cannot enable TLS without cert-manager.\n  Install it manually: https://cert-manager.io/docs/installation/" ;;
                 esac
-                info "Installing cert-manager..."
-                kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+                info "Installing cert-manager v1.17.1..."
+                kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
                 info "Waiting for cert-manager to be ready..."
                 kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
                 kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=120s
@@ -932,6 +950,7 @@ apply_k8s_cert_manager() {
         return 0
     fi
     info "Applying cert-manager ClusterIssuer..."
+    sed -i "s|EMAIL_PLACEHOLDER|${TLS_EMAIL}|g" "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml"
     kubectl apply -f "${K8S_TEMP_DIR}/cert-manager/"
     success "ClusterIssuer 'cosy-letsencrypt' created."
 }
