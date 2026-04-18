@@ -323,8 +323,11 @@ uninstall_kubernetes() {
         managed_by="$(kubectl get clusterissuer cosy-letsencrypt -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || true)"
         if [[ "$managed_by" == "cosy" ]]; then
             info "Removing ClusterIssuer 'cosy-letsencrypt'..."
-            kubectl delete clusterissuer cosy-letsencrypt || true
-            success "ClusterIssuer removed."
+            if kubectl delete clusterissuer cosy-letsencrypt; then
+                success "ClusterIssuer removed."
+            else
+                warn "Failed to remove ClusterIssuer 'cosy-letsencrypt'. It may require manual cleanup:\n    kubectl delete clusterissuer cosy-letsencrypt"
+            fi
         else
             info "ClusterIssuer 'cosy-letsencrypt' exists but is not managed by COSY; leaving it in place."
         fi

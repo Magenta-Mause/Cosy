@@ -439,6 +439,10 @@ check_docker_prerequisites() {
         fatal "Docker Compose is not installed.\n\n  Make sure either the \`docker compose\` or \`docker-compose\` command is available."
     fi
 
+    if ! command -v ss &>/dev/null && ! command -v netstat &>/dev/null; then
+        fatal "Neither 'ss' nor 'netstat' is installed, but one is required to check port availability.\n  Install iproute2 (provides 'ss') or net-tools (provides 'netstat')."
+    fi
+
     if [[ "$ENABLE_TLS" == "true" ]]; then
         for check_port in 80 443; do
             if ss -tlnp 2>/dev/null | grep -q ":${check_port} " || \
@@ -590,19 +594,21 @@ wait_for_docker_health() {
     # When TLS is enabled, Caddy matches requests by domain name.
     # Use the Host header so Caddy routes correctly, and -Lk to follow
     # redirects and accept not-yet-trusted certs during provisioning.
+    local health_url fallback_url
+    local -a curl_opts
     if [[ "$ENABLE_TLS" == "true" ]]; then
-        local health_url="http://127.0.0.1/api/actuator/health"
-        local fallback_url="http://127.0.0.1"
-        local curl_opts="-sfLk -H Host:${DOMAIN}"
+        health_url="http://127.0.0.1/api/actuator/health"
+        fallback_url="http://127.0.0.1"
+        curl_opts=(-sfLk -H "Host:${DOMAIN}")
     else
-        local health_url="http://127.0.0.1:${PORT}/api/actuator/health"
-        local fallback_url="http://127.0.0.1:${PORT}"
-        local curl_opts="-sf"
+        health_url="http://127.0.0.1:${PORT}/api/actuator/health"
+        fallback_url="http://127.0.0.1:${PORT}"
+        curl_opts=(-sf)
     fi
 
     while [[ $retries -lt $max_retries ]]; do
-        if curl $curl_opts "$health_url" &>/dev/null || \
-           curl $curl_opts "$fallback_url" &>/dev/null; then
+        if curl "${curl_opts[@]}" "$health_url" &>/dev/null || \
+           curl "${curl_opts[@]}" "$fallback_url" &>/dev/null; then
             break
         fi
         retries=$((retries + 1))
