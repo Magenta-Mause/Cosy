@@ -109,6 +109,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
   - `docker` (v29.1.3 was tested, others may work)
   - `docker compose` plugin (or standalone `docker-compose`)
   - One of `htpasswd` or `openssl` (for credential generation)
+  - One of `ss` (iproute2) or `netstat` (net-tools) (for port availability checks)
 </details>
 
 <details>
@@ -118,6 +119,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
   - An Ingress controller running in the cluster
   - One of `htpasswd` or `openssl` (for credential generation)
   - each node in the cluster must have docker installed
+  - When `--tls` is enabled, the installer will install [cert-manager](https://cert-manager.io/) into the cluster if it is not already present
 </details>
 
 ---

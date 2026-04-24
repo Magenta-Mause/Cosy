@@ -37,6 +37,7 @@ CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${
 K8S_NAMESPACE="cosy"
 INFLUXDB_ORG="cosy-org"
 INFLUXDB_BUCKET="cosy-bucket"
+BACKEND_HEALTH_PATH="/api/actuator/health"
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 INSTALL_PATH_DEFAULT="/opt"
@@ -463,7 +464,7 @@ check_docker_prerequisites() {
         done
     else
         if $port_check_cmd 2>/dev/null | grep -q ":${PORT} "; then
-            fatal "Port ${PORT} (nginx) is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
+            fatal "Port ${PORT} is already in use.\n\n  Either stop the service using that port or choose a different port:\n    $0 --port <port>"
         fi
         success "Port ${PORT} is available."
     fi
@@ -608,18 +609,18 @@ wait_for_docker_health() {
     local max_retries=60 interval=3 retries=0
 
     # When TLS is enabled, probe the HTTPS endpoint directly using the
-    # configured domain name so Caddy can route via SNI/host matching, but
-    # pin that domain to localhost so readiness does not depend on external
-    # DNS or routing. Keep -k to tolerate not-yet-trusted certs during
+    # configured domain name so Caddy can route via SNI/host matching. Use
+    # real DNS resolution so a misconfigured domain surfaces here rather
+    # than being masked. Keep -k to tolerate not-yet-trusted certs during
     # provisioning.
     local health_url fallback_url
     local -a curl_opts
     if [[ "$ENABLE_TLS" == "true" ]]; then
-        health_url="https://${DOMAIN}/api/actuator/health"
+        health_url="https://${DOMAIN}${BACKEND_HEALTH_PATH}"
         fallback_url="https://${DOMAIN}"
-        curl_opts=(-sfk --resolve "${DOMAIN}:443:127.0.0.1")
+        curl_opts=(-sfk)
     else
-        health_url="http://127.0.0.1:${PORT}/api/actuator/health"
+        health_url="http://127.0.0.1:${PORT}${BACKEND_HEALTH_PATH}"
         fallback_url="http://127.0.0.1:${PORT}"
         curl_opts=(-sf)
     fi
