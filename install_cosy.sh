@@ -792,17 +792,16 @@ check_k8s_prerequisites() {
                     [nN]|[nN][oO])
                         fatal "Cannot enable TLS without cert-manager.\n  Install it manually: https://cert-manager.io/docs/installation/" ;;
                 esac
-                local cert_manager_version="v1.17.1"
-                info "Installing cert-manager ${cert_manager_version}..."
-                kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${cert_manager_version}/cert-manager.yaml"
-                info "Waiting for cert-manager to be ready..."
-                kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
-                kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=120s
-                kubectl wait --for=condition=Available deployment/cert-manager-cainjector -n cert-manager --timeout=120s
-                success "cert-manager installed successfully."
-            else
-                fatal "cert-manager is not installed and cannot prompt for installation in non-interactive mode.\n  Install it manually first: https://cert-manager.io/docs/installation/"
             fi
+
+            local cert_manager_version="v1.17.1"
+            info "Installing cert-manager ${cert_manager_version}..."
+            kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${cert_manager_version}/cert-manager.yaml"
+            info "Waiting for cert-manager to be ready..."
+            kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
+            kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=120s
+            kubectl wait --for=condition=Available deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+            success "cert-manager installed successfully."
         fi
     fi
 }
@@ -979,11 +978,26 @@ apply_k8s_cert_manager() {
         return 0
     fi
     info "Applying cert-manager ClusterIssuer..."
+
+    # Refuse to overwrite a pre-existing ClusterIssuer of the same name that
+    # was not created by this installer — it may belong to another tenant or
+    # workload on the cluster and overwriting it (including the ACME email)
+    # could be disruptive cluster-wide.
+    local issuer_name="cosy-letsencrypt"
+    if kubectl get clusterissuer "$issuer_name" &>/dev/null; then
+        local managed_by
+        managed_by=$(kubectl get clusterissuer "$issuer_name" \
+            -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || true)
+        if [[ "$managed_by" != "cosy" ]]; then
+            fatal "ClusterIssuer '${issuer_name}' already exists and is not managed by cosy (label 'app.kubernetes.io/managed-by=cosy' missing).\n\n  Refusing to overwrite it to avoid breaking another workload on this cluster.\n  Either rename/remove the existing ClusterIssuer, or rerun with TLS disabled."
+        fi
+    fi
+
     local tls_email_esc
     tls_email_esc=$(sed_escape_replacement "$TLS_EMAIL")
     sed -i "s|EMAIL_PLACEHOLDER|${tls_email_esc}|g" "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml"
     kubectl apply -f "${K8S_TEMP_DIR}/cert-manager/"
-    success "ClusterIssuer 'cosy-letsencrypt' created."
+    success "ClusterIssuer '${issuer_name}' created."
 }
 
 # ── K8s: Main deployment function ────────────────────────────────────────────
