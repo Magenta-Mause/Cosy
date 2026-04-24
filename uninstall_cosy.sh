@@ -199,7 +199,7 @@ uninstall_docker() {
     # ── Stop and remove containers, volumes, and networks ────────────────────
     info "Stopping and removing COSY containers, volumes, and networks..."
 
-    COMPOSE_ARGS=(-f "${COMPOSE_FILE}")
+    COMPOSE_ARGS=(--profile tls --profile no-tls -f "${COMPOSE_FILE}")
     if [[ -f "${ENV_FILE}" ]]; then
         COMPOSE_ARGS+=(--env-file "${ENV_FILE}")
     fi

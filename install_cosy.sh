@@ -488,27 +488,12 @@ download_docker_configs() {
     local config_dir="${INSTALL_PATH}/config"
     mkdir -p "$config_dir"
 
-    # Always download shared config files
-    local -a files=("loki-config.yaml" "loki-nginx.conf")
+    local -a files=("loki-config.yaml" "loki-nginx.conf" "docker-compose.yml")
 
     if [[ "$ENABLE_TLS" == "true" ]]; then
-        # Download Caddy-based compose file (saved as docker-compose.yml)
-        curl -fL -o "${config_dir}/docker-compose.yml" "${CONFIG_FILES_URL_PREFIX}/config/docker/docker-compose-tls.yml" 2>/dev/null \
-            || fatal "Failed to download docker-compose-tls.yml\n\n  Check your internet connection and try again."
-        success "docker-compose.yml (TLS) downloaded."
-
-        # Download and configure Caddyfile
-        curl -fL -o "${config_dir}/Caddyfile" "${CONFIG_FILES_URL_PREFIX}/config/docker/Caddyfile" 2>/dev/null \
-            || fatal "Failed to download Caddyfile\n\n  Check your internet connection and try again."
-        local domain_esc tls_email_esc
-        domain_esc=$(sed_escape_replacement "$DOMAIN")
-        tls_email_esc=$(sed_escape_replacement "$TLS_EMAIL")
-        sed -i "s|DOMAIN_PLACEHOLDER|${domain_esc}|g" "${config_dir}/Caddyfile"
-        sed -i "s|EMAIL_PLACEHOLDER|${tls_email_esc}|g" "${config_dir}/Caddyfile"
-        success "Caddyfile downloaded and configured."
+        files+=("Caddyfile")
     else
-        # Download nginx-based compose and config
-        files+=("docker-compose.yml" "nginx.conf")
+        files+=("nginx.conf")
     fi
 
     for f in "${files[@]}"; do
@@ -516,6 +501,16 @@ download_docker_configs() {
             || fatal "Failed to download ${f} from ${CONFIG_FILES_URL_PREFIX}/config/docker/${f}\n\n  Check your internet connection and try again."
         success "${f} downloaded."
     done
+
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        local domain_esc tls_email_esc
+        domain_esc=$(sed_escape_replacement "$DOMAIN")
+        tls_email_esc=$(sed_escape_replacement "$TLS_EMAIL")
+        sed -i "s|DOMAIN_PLACEHOLDER|${domain_esc}|g" "${config_dir}/Caddyfile"
+        sed -i "s|EMAIL_PLACEHOLDER|${tls_email_esc}|g" "${config_dir}/Caddyfile"
+        success "Caddyfile configured."
+    fi
+
     success "All configuration files downloaded."
 }
 
@@ -524,10 +519,17 @@ write_docker_env_file() {
     info "Creating .env file for docker-compose..."
     local env_file="${INSTALL_PATH}/config/.env"
 
-    local host_uid docker_gid volume_dir
+    local host_uid docker_gid volume_dir compose_profile custom_metrics_base_url
     host_uid=$(id -u)
     docker_gid=$(getent group docker | cut -d: -f3)
     volume_dir="${INSTALL_PATH}/volumes"
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        compose_profile="tls"
+        custom_metrics_base_url="https://${DOMAIN}"
+    else
+        compose_profile="no-tls"
+        custom_metrics_base_url="http://host.docker.internal:${PORT}"
+    fi
 
     cat > "$env_file" <<EOF
 # COSY Installer ${COSY_TAG}
@@ -537,6 +539,7 @@ write_docker_env_file() {
 COSY_TAG=${COSY_TAG}
 HOST_UID=${host_uid}
 DOCKER_GID=${docker_gid}
+COMPOSE_PROFILES=${compose_profile}
 
 # Image tags
 BACKEND_IMAGE_TAG=${BACKEND_TAG}
@@ -548,6 +551,7 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD}
 PORT=${PORT}
 DOMAIN=${DOMAIN}
 COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ORIGIN}
+COSY_CUSTOM_METRICS_BASE_URL=${custom_metrics_base_url}
 VOLUME_DIRECTORY=${volume_dir}
 
 # PostgreSQL credentials
@@ -722,12 +726,6 @@ deploy_docker() {
 # ── K8s: Download manifests ────────────────────────────────────────────────
 download_k8s_manifests() {
     info "Downloading K8s manifests..."
-    
-    # Define all manifest files to download
-    local ingress_files="frontend.yaml backend.yaml"
-    if [[ "$ENABLE_TLS" == "true" ]]; then
-        ingress_files="frontend-tls.yaml backend-tls.yaml"
-    fi
 
     local -A manifest_files=(
         [postgres]="pvc.yaml service.yaml statefulset.yaml"
@@ -736,7 +734,7 @@ download_k8s_manifests() {
         [influxdb]="pvc-data.yaml pvc-config.yaml deployment.yaml service.yaml"
         [backend]="deployment.yaml service.yaml"
         [frontend]="deployment.yaml service.yaml"
-        [ingress]="$ingress_files"
+        [ingress]="frontend.yaml backend.yaml"
     )
 
     for subdir in "${!manifest_files[@]}"; do
@@ -748,12 +746,7 @@ download_k8s_manifests() {
         done
     done
 
-    # Rename TLS ingress files so the rest of the script works unchanged
     if [[ "$ENABLE_TLS" == "true" ]]; then
-        mv "${K8S_TEMP_DIR}/ingress/frontend-tls.yaml" "${K8S_TEMP_DIR}/ingress/frontend.yaml"
-        mv "${K8S_TEMP_DIR}/ingress/backend-tls.yaml" "${K8S_TEMP_DIR}/ingress/backend.yaml"
-
-        # Download cert-manager ClusterIssuer
         mkdir -p "${K8S_TEMP_DIR}/cert-manager"
         curl -fL -o "${K8S_TEMP_DIR}/cert-manager/cluster-issuer.yaml" "${CONFIG_FILES_URL_PREFIX}/config/k8s/cert-manager/cluster-issuer.yaml" 2>/dev/null \
             || fatal "Failed to download cert-manager/cluster-issuer.yaml\n\n  Check your internet connection and try again."
@@ -942,6 +935,19 @@ apply_k8s_ingresses() {
     local domain_esc
     domain_esc=$(sed_escape_replacement "$DOMAIN")
     find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "s|DOMAIN_PLACEHOLDER|${domain_esc}|g" {} \;
+
+    # TLS-only blocks in the ingress manifests are delimited by
+    # `# TLS_*_START` / `# TLS_*_END` marker comments. With TLS enabled we
+    # strip only the marker lines; without TLS we drop the markers and
+    # everything between them.
+    local tls_sed
+    if [[ "$ENABLE_TLS" == "true" ]]; then
+        tls_sed='/# TLS_[A-Z_]*_\(START\|END\)/d'
+    else
+        tls_sed='/# TLS_[A-Z_]*_START/,/# TLS_[A-Z_]*_END/d'
+    fi
+    find "$manifest_dir" -name "*.yaml" -type f -exec sed -i "$tls_sed" {} \;
+
     kubectl apply -n "$K8S_NAMESPACE" -f "$manifest_dir/"
     info "Ingresses created for '${DOMAIN}'."
 }

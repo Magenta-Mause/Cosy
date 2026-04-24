@@ -3,6 +3,12 @@ kind: Ingress
 metadata:
   name: cosy-backend
 spec:
+  # TLS_BLOCK_START
+  tls:
+    - hosts:
+        - DOMAIN_PLACEHOLDER
+      secretName: cosy-tls
+  # TLS_BLOCK_END
   rules:
     - host: DOMAIN_PLACEHOLDER
       http:
