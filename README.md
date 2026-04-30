@@ -109,6 +109,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
   - `docker` (v29.1.3 was tested, others may work)
   - `docker compose` plugin (or standalone `docker-compose`)
   - One of `htpasswd` or `openssl` (for credential generation)
+  - One of `ss` (iproute2) or `netstat` (net-tools) (for port availability checks)
 </details>
 
 <details>
@@ -118,6 +119,7 @@ If the script is run interactively (in a terminal) without `--default`, it will 
   - An Ingress controller running in the cluster
   - One of `htpasswd` or `openssl` (for credential generation)
   - each node in the cluster must have docker installed
+  - When `--tls` is enabled, the installer will install [cert-manager](https://cert-manager.io/) into the cluster if it is not already present
 </details>
 
 ---
@@ -139,9 +141,11 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 | Flag | Description | Allowed values | Default |
 | --- | --- | --- | --- |
 | `--path /path/to/base` | Base directory to install into. A `cosy/` subdirectory is created inside this path (e.g. `--path /opt` → `/opt/cosy`). Supports `~`, relative paths, and absolute paths. | Any writable directory path | `/opt` |
-| `--port <port>` | Host port cosy is exposed on. | Integer between `1` and `65535` | `80` |
+| `--port <port>` | Host port cosy is exposed on. Cannot be combined with `--tls`. | Integer between `1` and `65535` | `80` |
+| `--tls` | Enable TLS/HTTPS via Let's Encrypt. Cosy is exposed on the standard ports `80` and `443`, so `--tls` cannot be combined with `--port`. Requires `--tls-email`. | — | — |
+| `--tls-email <email>` | Email used by Let's Encrypt for certificate expiry notifications. Required when `--tls` is set. | Any valid email address | — |
 | `--username <name>` | Username for the initial COSY admin account created on first boot. | Any non-empty string | `admin` |
-| `--domain <domain>` | Domain or hostname used to construct the allowed CORS origin (`http://<domain>:<port>`). Should match the address users will use to access COSY. | Any valid hostname or domain | Value of `/etc/hostname` |
+| `--domain <domain>` | Domain or hostname used to construct the allowed CORS origin (`http://<domain>:<port>` or `https://<domain>` with `--tls`). Should match the address users will use to access COSY. | Any valid hostname or domain | Value of `/etc/hostname` |
 | `--default` | Skip all interactive prompts and use default values for any option not explicitly provided. Useful for scripted / automated installs. | — | — |
 | `-h`, `--help` | Print the Docker-specific help message and exit. | — | — |
 
@@ -158,6 +162,9 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 
 # Custom install path and admin username
 ./install_cosy.sh docker --path ~/cosy-install --username myadmin --default
+
+# TLS/HTTPS via Let's Encrypt (binds ports 80 and 443)
+./install_cosy.sh docker --domain cosy.example.com --tls --tls-email admin@example.com --default
 ```
 
 ---
@@ -169,6 +176,8 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 
 | Flag | Description | Allowed values | Default |
 | --- | --- | --- | --- |
+| `--tls` | Enable TLS/HTTPS via Let's Encrypt. Ingress manifests are configured with cert-manager; cert-manager is installed into the cluster if it is not already present. Requires `--tls-email`. | — | — |
+| `--tls-email <email>` | Email used by Let's Encrypt for certificate expiry notifications. Required when `--tls` is set. | Any valid email address | — |
 | `--username <name>` | Username for the initial COSY admin account. | Any non-empty string | `admin` |
 | `--domain <domain>` | Domain used for the Ingress host rules and CORS origin. Must match the DNS name pointing to the cluster's Ingress controller. | Any valid hostname or domain | Value of `/etc/hostname` |
 | `--default` | Skip all interactive prompts and use defaults. | — | — |
@@ -187,6 +196,9 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 
 # Custom admin username
 ./install_cosy.sh k8s --username myadmin --domain cosy.example.com --default
+
+# TLS/HTTPS via Let's Encrypt (installs cert-manager if missing)
+./install_cosy.sh k8s --domain cosy.example.com --tls --tls-email admin@example.com --default
 ```
 
 ---

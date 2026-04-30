@@ -1,0 +1,39 @@
+name: Redirect Issues to Main Repository
+
+on:
+  issues:
+    types: [opened, reopened]
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Comment and close issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mainRepo = 'Magenta-Mause/cosy';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 👋 Thanks for opening an issue!
+
+            This repository is not the right place for issues. We collect all issues related to the Cosy Project in the main Cosy repository.
+            Please open your issue in our [${mainRepo}](https://github.com/${mainRepo}/issues/new/choose) instead:
+
+            👉 **[Open an issue in ${mainRepo}](https://github.com/${mainRepo}/issues/new/choose)**
+
+            This issue will be closed automatically. We look forward to your issue on our _cosy_ Cosy-Repository! 🦆`
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed'
+            });

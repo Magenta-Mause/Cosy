@@ -2,7 +2,17 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: cosy-frontend
+  # TLS_ANNOTATIONS_START
+  annotations:
+    cert-manager.io/cluster-issuer: "cosy-letsencrypt"
+  # TLS_ANNOTATIONS_END
 spec:
+  # TLS_BLOCK_START
+  tls:
+    - hosts:
+        - DOMAIN_PLACEHOLDER
+      secretName: cosy-tls
+  # TLS_BLOCK_END
   rules:
     - host: DOMAIN_PLACEHOLDER
       http:

@@ -67,7 +67,7 @@ services:
       - COSY_FOOTER_CITY=${FOOTER_CITY}
       - COSY_CORS_ALLOWED_ORIGINS=${COSY_CORS_ALLOWED_ORIGINS}
       - COSY_JWT_SECRET_KEY=${COSY_JWT_SECRET_KEY}
-      - COSY_CUSTOM_METRICS_BASE_URL=http://host.docker.internal:${PORT}
+      - COSY_CUSTOM_METRICS_BASE_URL=${COSY_CUSTOM_METRICS_BASE_URL}
     depends_on:
       database:
         condition: service_healthy
@@ -102,10 +102,35 @@ services:
   nginx:
     image: nginx:1.25
     container_name: cosy-nginx
+    profiles: ["no-tls"]
     ports:
       - "0.0.0.0:${PORT}:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    networks:
+      - cosy-network
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    container_name: cosy-caddy
+    profiles: ["tls"]
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       frontend:
         condition: service_started
@@ -198,6 +223,8 @@ volumes:
   influx_config:
   postgres-data:
   loki-data:
+  caddy_data:
+  caddy_config:
 
 networks:
   cosy-network:

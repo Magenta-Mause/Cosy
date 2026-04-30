@@ -199,7 +199,7 @@ uninstall_docker() {
     # ── Stop and remove containers, volumes, and networks ────────────────────
     info "Stopping and removing COSY containers, volumes, and networks..."
 
-    COMPOSE_ARGS=(-f "${COMPOSE_FILE}")
+    COMPOSE_ARGS=(--profile tls --profile no-tls -f "${COMPOSE_FILE}")
     if [[ -f "${ENV_FILE}" ]]; then
         COMPOSE_ARGS+=(--env-file "${ENV_FILE}")
     fi
@@ -315,6 +315,22 @@ uninstall_kubernetes() {
         success "Namespace '${K8S_NAMESPACE}' deleted."
     else
         fatal "Failed to delete namespace '${K8S_NAMESPACE}'.\n\n  Try manually:\n    kubectl delete namespace ${K8S_NAMESPACE}"
+    fi
+
+    # Clean up cluster-scoped ClusterIssuer only if it was created by COSY
+    if kubectl get clusterissuer cosy-letsencrypt &>/dev/null 2>&1; then
+        local managed_by
+        managed_by="$(kubectl get clusterissuer cosy-letsencrypt -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || true)"
+        if [[ "$managed_by" == "cosy" ]]; then
+            info "Removing ClusterIssuer 'cosy-letsencrypt'..."
+            if kubectl delete clusterissuer cosy-letsencrypt; then
+                success "ClusterIssuer removed."
+            else
+                warn "Failed to remove ClusterIssuer 'cosy-letsencrypt'. It may require manual cleanup:\n    kubectl delete clusterissuer cosy-letsencrypt"
+            fi
+        else
+            info "ClusterIssuer 'cosy-letsencrypt' exists but is not managed by COSY; leaving it in place."
+        fi
     fi
 }
 
