@@ -249,13 +249,6 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       ADMIN_USERNAME="${input_user:-$ADMIN_USERNAME_DEFAULT}"
     fi
 
-    # ── Port (Docker only) ───────────────────────────────────────────────────
-    if [[ "$DEPLOY_METHOD" == "docker" && -z "${PORT-}" ]]; then
-      read -rp "Port [default: ${PORT_DEFAULT}]: " input_port
-      PORT="${input_port:-$PORT_DEFAULT}"
-      validate_port "$PORT"
-    fi
-
     # ── TLS ──────────────────────────────────────────────────────────────────
     if [[ -z "${ENABLE_TLS-}" ]]; then
       read -rp "Enable TLS/HTTPS via Let's Encrypt? [y/N]: " input_tls
@@ -273,6 +266,13 @@ if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
       read -rp "Email for Let's Encrypt notifications: " input_tls_email
       [[ -z "$input_tls_email" ]] && fatal "An email address is required for Let's Encrypt certificate provisioning."
       TLS_EMAIL="$input_tls_email"
+    fi
+
+    # ── Port (Docker only, skipped when TLS is enabled) ──────────────────────
+    if [[ "$DEPLOY_METHOD" == "docker" && "${ENABLE_TLS-}" != "true" && -z "${PORT-}" ]]; then
+      read -rp "Port [default: ${PORT_DEFAULT}]: " input_port
+      PORT="${input_port:-$PORT_DEFAULT}"
+      validate_port "$PORT"
     fi
 
     # ── Domain ───────────────────────────────────────────────────────────────
