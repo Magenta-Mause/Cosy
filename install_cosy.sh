@@ -29,9 +29,9 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="v1.0.1"
-FRONTEND_TAG="sha-edd9425"
-BACKEND_TAG="sha-c68e624"
+COSY_TAG="v1.0.2"
+FRONTEND_TAG="sha-e62ba91"
+BACKEND_TAG="sha-5ae11f7"
 CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
 
 K8S_NAMESPACE="cosy"
