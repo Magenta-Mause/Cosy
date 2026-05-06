@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussion
+    url: https://github.com/magenta-mause/cosy-templates/discussions
+    about: Ask usage questions or share ideas in Discussions
+
+# Order templates numerically
+

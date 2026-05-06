@@ -1,0 +1,37 @@
+name: "🐛 Bug Report"
+description: Report issues with existing templates
+title: "[BUG] templates/{game}/{template} - Short description"
+labels: ["bug", "needs-triage"]
+body:
+  - type: input
+    id: template
+    attributes:
+      label: Affected template
+      description: Path to the broken template
+      placeholder: /templates/minecraft/fabric.yaml
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Steps to reproduce + error logs
+      placeholder: |
+        1. Used version 1.20.4
+        2. Server failed to start
+        Logs: ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "Server starts and is playable"
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      placeholder: Docker version, host OS, variable values used
+
