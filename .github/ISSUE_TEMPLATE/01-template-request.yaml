@@ -1,7 +1,7 @@
 name: "🆕 Template Request"
 description: Request a new game server template
 title: "[TEMPLATE] Game Name - Short description"
-labels: ["template-request", "enhancement"]
+labels: ["new template"]
 body:
   - type: markdown
     attributes:
