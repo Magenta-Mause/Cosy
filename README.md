@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/badge/github-templates--repository-blue?logo=github">
   </a>
   <a href="https://discord.gg/nNtZJnSpSk">
-    <img alt="Discord Server" src="https://img.shields.io/discord/1482365927856017576?logo=discord&label=%20discord&color=5865F2">
+    <img alt="Discord Server" src="https://img.shields.io/discord/1482365926304387196?logo=discord&label=%20discord&color=5865F2">
   </a>
   <a href="https://cosy-hosting.net/">
       <img src="https://img.shields.io/badge/Documentation-F7951D" alt="Documentation" />
