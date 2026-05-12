@@ -22,14 +22,11 @@
   <a href="https://github.com/Magenta-Mause/Cosy-Templates">
     <img src="https://img.shields.io/badge/github-templates--repository-blue?logo=github">
   </a>
-  <a href="https://discord.gg/2uDybryKPe">
+  <a href="https://discord.gg/nNtZJnSpSk">
     <img alt="Discord Server" src="https://img.shields.io/discord/1482365926304387196?logo=discord&label=%20discord&color=5865F2">
   </a>
-  <a href="https://cosy-docs.jannekeipert.de/">
-    <img src="https://img.shields.io/badge/Home%20Page-F7951D" alt="Home Page" />
-  </a>
-  <a href="https://cosy-docs.jannekeipert.de/docs/">
-    <img src="https://img.shields.io/badge/Documentation-F7951D" alt="Documentation" />
+  <a href="https://cosy-hosting.net/">
+      <img src="https://img.shields.io/badge/Documentation-F7951D" alt="Documentation" />
   </a>
   <a href="https://github.com/Magenta-Mause/Cosy-Templates/tree/main/templates">
     <img src="https://img.shields.io/github/directory-file-count/Magenta-Mause/Cosy-Templates/templates?label=Supported%20Games" alt="Supported Games">
