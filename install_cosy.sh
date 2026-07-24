@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,10 +29,13 @@ error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 fatal()   { error "$*"; exit 1; }
 
 # ── Constants ────────────────────────────────────────────────────────────────
-COSY_TAG="v1.0.3"
-FRONTEND_TAG="sha-5dba6e8"
-BACKEND_TAG="sha-e200a4d"
-CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${COSY_TAG}/"
+# Image / config versions. Each is overridable via the environment (e.g.
+# `BACKEND_TAG=sha-abc123 ./install_cosy.sh docker`) or the corresponding CLI
+# flag (--backend-tag / --frontend-tag / --config-ref). CONFIG_FILES_URL_PREFIX
+# is computed later, after all overrides are resolved.
+: "${COSY_TAG:=v1.0.3}"
+: "${FRONTEND_TAG:=sha-5dba6e8}"
+: "${BACKEND_TAG:=sha-e200a4d}"
 
 K8S_NAMESPACE="cosy"
 INFLUXDB_ORG="cosy-org"
@@ -82,6 +85,9 @@ usage_docker() {
     echo "  --footer-phone    <phone>     Footer contact phone number          (default: empty)"
     echo "  --footer-street   <street>    Footer contact street address        (default: empty)"
     echo "  --footer-city     <city>      Footer contact city & zip code       (default: empty)"
+    echo "  --backend-tag <tag>           Override the backend image tag       (default: ${BACKEND_TAG})"
+    echo "  --frontend-tag <tag>          Override the frontend image tag      (default: ${FRONTEND_TAG})"
+    echo "  --config-ref <git-ref>        Git ref for downloaded config files  (default: ${COSY_TAG})"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -102,6 +108,9 @@ usage_kubernetes() {
     echo "  --footer-phone    <phone>     Footer contact phone number          (default: empty)"
     echo "  --footer-street   <street>    Footer contact street address        (default: empty)"
     echo "  --footer-city     <city>      Footer contact city & zip code       (default: empty)"
+    echo "  --backend-tag <tag>           Override the backend image tag       (default: ${BACKEND_TAG})"
+    echo "  --frontend-tag <tag>          Override the frontend image tag      (default: ${FRONTEND_TAG})"
+    echo "  --config-ref <git-ref>        Git ref for downloaded manifests     (default: ${COSY_TAG})"
     echo "  --default                     Use defaults for all unset options (non-interactive)"
     echo "  -h, --help                    Show this help message"
     exit 0
@@ -165,6 +174,13 @@ while [[ $# -gt 0 ]]; do
             FOOTER_STREET="$2"; shift 2 ;;
         --footer-city)
             FOOTER_CITY="$2"; shift 2 ;;
+        # ── Version override flags (shared) ──────────────────────────────────
+        --backend-tag)
+            BACKEND_TAG="$2"; shift 2 ;;
+        --frontend-tag)
+            FRONTEND_TAG="$2"; shift 2 ;;
+        --config-ref)
+            CONFIG_REF="$2"; shift 2 ;;
         --default)
             USE_DEFAULTS=true; shift ;;
         -h|--help)
@@ -173,6 +189,12 @@ while [[ $# -gt 0 ]]; do
             fatal "Unknown option: $1\nRun '$0 ${DEPLOY_METHOD} --help' for usage information." ;;
     esac
 done
+
+# ── Resolve config source ref & URL prefix (after all overrides applied) ─────
+# The ref used to fetch config/manifest files defaults to COSY_TAG but can be
+# pointed at any git ref via --config-ref (or the CONFIG_REF env var).
+CONFIG_REF="${CONFIG_REF:-$COSY_TAG}"
+CONFIG_FILES_URL_PREFIX="https://raw.githubusercontent.com/Magenta-Mause/Cosy/${CONFIG_REF}/"
 
 # ── Validate mutually exclusive flags ───────────────────────────────────────
 if [[ "${ENABLE_TLS-}" == "true" && "${PORT_EXPLICITLY_SET-}" == "true" ]]; then
@@ -585,6 +607,28 @@ EOF
     success ".env file created at ${env_file}"
 }
 
+# ── Docker: Write credentials.txt ───────────────────────────────────────────
+# Persist the admin login (and access URL) so the operator can retrieve it
+# after the one-time summary scrolls away. Mirrors the .env file's 600 perms.
+write_docker_credentials_file() {
+    info "Saving credentials file..."
+    local creds_file="${INSTALL_PATH}/credentials.txt"
+
+    cat > "$creds_file" <<EOF
+# COSY Installer ${COSY_TAG}
+# Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+#
+# Keep this file safe - it contains the COSY admin login.
+
+Username:   ${ADMIN_USERNAME}
+Password:   ${ADMIN_PASSWORD}
+Access URL: ${ACCESS_URL}
+EOF
+
+    chmod 600 "$creds_file"
+    success "Credentials saved at ${creds_file}"
+}
+
 # ── Docker: Start services ──────────────────────────────────────────────────
 start_docker_services() {
     info "Starting COSY services..."
@@ -709,6 +753,7 @@ deploy_docker() {
     success "Volume directory created."
 
     write_docker_env_file
+    write_docker_credentials_file
     start_docker_services
     wait_for_docker_health
     install_systemd_service
