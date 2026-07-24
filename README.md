@@ -143,6 +143,9 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 | `--tls-email <email>` | Email used by Let's Encrypt for certificate expiry notifications. Required when `--tls` is set. | Any valid email address | — |
 | `--username <name>` | Username for the initial COSY admin account created on first boot. | Any non-empty string | `admin` |
 | `--domain <domain>` | Domain or hostname used to construct the allowed CORS origin (`http://<domain>:<port>` or `https://<domain>` with `--tls`). Should match the address users will use to access COSY. | Any valid hostname or domain | Value of `/etc/hostname` |
+| `--backend-tag <tag>` | Override the backend container image tag. Also settable via the `BACKEND_TAG` env var. | Any published image tag | Pinned release tag |
+| `--frontend-tag <tag>` | Override the frontend container image tag. Also settable via the `FRONTEND_TAG` env var. | Any published image tag | Pinned release tag |
+| `--config-ref <git-ref>` | Git ref (tag/branch/SHA) the config files are downloaded from. Also settable via the `CONFIG_REF` env var. | Any ref in the Cosy repo | Value of `COSY_TAG` |
 | `--default` | Skip all interactive prompts and use default values for any option not explicitly provided. Useful for scripted / automated installs. | — | — |
 | `-h`, `--help` | Print the Docker-specific help message and exit. | — | — |
 
@@ -177,6 +180,9 @@ If the script is run interactively (in a terminal) without `--default`, it will 
 | `--tls-email <email>` | Email used by Let's Encrypt for certificate expiry notifications. Required when `--tls` is set. | Any valid email address | — |
 | `--username <name>` | Username for the initial COSY admin account. | Any non-empty string | `admin` |
 | `--domain <domain>` | Domain used for the Ingress host rules and CORS origin. Must match the DNS name pointing to the cluster's Ingress controller. | Any valid hostname or domain | Value of `/etc/hostname` |
+| `--backend-tag <tag>` | Override the backend container image tag. Also settable via the `BACKEND_TAG` env var. | Any published image tag | Pinned release tag |
+| `--frontend-tag <tag>` | Override the frontend container image tag. Also settable via the `FRONTEND_TAG` env var. | Any published image tag | Pinned release tag |
+| `--config-ref <git-ref>` | Git ref (tag/branch/SHA) the K8s manifests are downloaded from. Also settable via the `CONFIG_REF` env var. | Any ref in the Cosy repo | Value of `COSY_TAG` |
 | `--default` | Skip all interactive prompts and use defaults. | — | — |
 | `-h`, `--help` | Print the Kubernetes-specific help message and exit. | — | — |
 

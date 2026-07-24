@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]] then
+if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
     if [[ -z "${UNINSTALL_METHOD-}" ]]; then
       echo -e "${BOLD}Select uninstallation method:${NC}"
       echo "  1) Docker  (default)"
