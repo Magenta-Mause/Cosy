@@ -12,6 +12,15 @@ set -euo pipefail
 #
 # Run './uninstall_cosy.sh <command> --help' for command-specific options.
 # ─────────────────────────────────────────────────────────────────────────────
+# License & liability
+# ─────────────────────────────────────────────────────────────────────────────
+# COSY is free and open-source software licensed under the MIT License and is
+# provided "AS IS", WITHOUT WARRANTY OF ANY KIND. As the operator of your own
+# instance you are solely responsible for its operation, security, data
+# protection/privacy (e.g. GDPR) and legal compliance. The COSY authors and
+# copyright holders accept no liability for how your instance is run.
+# See the LICENSE file for the full terms.
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ── Color & helpers ──────────────────────────────────────────────────────────
 RED='\033[0;31m'

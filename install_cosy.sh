@@ -12,6 +12,16 @@ set -euo pipefail
 #
 # Run './install_cosy.sh <command> --help' for command-specific options.
 # ─────────────────────────────────────────────────────────────────────────────
+# License & liability
+# ─────────────────────────────────────────────────────────────────────────────
+# COSY is free and open-source software licensed under the MIT License and is
+# provided "AS IS", WITHOUT WARRANTY OF ANY KIND. By installing and running it
+# you become the operator of your own instance and are solely responsible for
+# its operation, security, data protection/privacy (e.g. GDPR) and legal
+# compliance. The COSY authors and copyright holders accept no liability for
+# how your instance is run or for any data processed by it.
+# See the LICENSE file for the full terms.
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ── Color & helpers ────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -211,6 +221,17 @@ echo "                              ++++++++*****               +++++****       
 echo "                                                                          #=+#++*#                                                                        "
 echo "                                                                          #+#++*#                                                                         "
 echo "                                                                          #*###                                                                           "
+
+# ── License & liability notice (informational, non-blocking) ─────────────────
+echo ""
+echo -e "${BOLD}${YELLOW}── License & liability ──────────────────────────────────────────────${NC}"
+warn "COSY is free/open-source software, MIT-licensed and provided \"AS IS\","
+warn "WITHOUT WARRANTY OF ANY KIND."
+warn "By running it you become the operator of your own instance and are"
+warn "solely responsible for its operation, security, data protection/privacy"
+warn "(e.g. GDPR) and legal compliance — not the COSY authors."
+info "Full terms: see the LICENSE file (https://github.com/Magenta-Mause/Cosy/blob/${COSY_TAG}/LICENSE)."
+echo ""
 
 # ── Interactive prompts (if running in a terminal) ───────────────────────────
 if [[ -t 0 ]] && [[ "${USE_DEFAULTS-}" != "true" ]]; then
