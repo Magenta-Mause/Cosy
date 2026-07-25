@@ -43,9 +43,9 @@ fatal()   { error "$*"; exit 1; }
 # `BACKEND_TAG=sha-abc123 ./install_cosy.sh docker`) or the corresponding CLI
 # flag (--backend-tag / --frontend-tag / --config-ref). CONFIG_FILES_URL_PREFIX
 # is computed later, after all overrides are resolved.
-: "${COSY_TAG:=v1.0.3}"
-: "${FRONTEND_TAG:=sha-5dba6e8}"
-: "${BACKEND_TAG:=sha-e200a4d}"
+: "${COSY_TAG:=v1.1.0}"
+: "${FRONTEND_TAG:=sha-2659b07}"
+: "${BACKEND_TAG:=sha-ecc4c14}"
 
 K8S_NAMESPACE="cosy"
 INFLUXDB_ORG="cosy-org"
