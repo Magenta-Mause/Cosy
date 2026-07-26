@@ -1,0 +1,49 @@
+name: trigger systemtest
+
+# This repository owns install_cosy.sh and config/, so a push here changes what a
+# real install actually does. Nothing in this repo verifies that — the end-to-end
+# check lives in Magenta-Mause/Cosy-Systemtest, which installs Cosy from scratch
+# on a clean runner and drives every feature through the UI.
+#
+# GITHUB_TOKEN is scoped to this repository only and cannot start a workflow in
+# another one, so this fires a repository_dispatch with an explicit token.
+on:
+  push:
+    branches: [main]
+
+# A burst of pushes should collapse into one verification run rather than queueing
+# several identical ones. cancel-in-progress is safe here because this job only
+# sends a request — it is the systemtest run itself that must not be cancelled,
+# and that has its own no-cancel concurrency group in the other repository.
+concurrency:
+  group: trigger-systemtest
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fire repository_dispatch at Cosy-Systemtest
+        env:
+          # Fine-grained PAT scoped to Magenta-Mause/Cosy-Systemtest ONLY, with
+          # repository permission "Contents: read and write" (which is what the
+          # repository_dispatch endpoint requires — there is no narrower scope).
+          GH_TOKEN: ${{ secrets.SYSTEMTEST_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::SYSTEMTEST_DISPATCH_TOKEN is not set. Create a fine-grained PAT" \
+                 "scoped to Magenta-Mause/Cosy-Systemtest with Contents: read and write," \
+                 "then add it as a repository secret named SYSTEMTEST_DISPATCH_TOKEN."
+            exit 1
+          fi
+
+          gh api repos/Magenta-Mause/Cosy-Systemtest/dispatches \
+            -f event_type=cosy-main-changed \
+            -f 'client_payload[reason]=push to Magenta-Mause/Cosy@main' \
+            -f "client_payload[cosy_sha]=${GITHUB_SHA}" \
+            -f "client_payload[cosy_compare]=${{ github.event.compare }}"
+
+          echo "Dispatched cosy-main-changed for ${GITHUB_SHA}."
+          echo "Run: https://github.com/Magenta-Mause/Cosy-Systemtest/actions/workflows/systemtest.yml"
